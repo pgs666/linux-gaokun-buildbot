@@ -15,7 +15,8 @@ zstd -T0 -19 "$ARTIFACT_DIR/$(basename "$IMAGE_FILE")" -o "$ARTIFACT_DIR/$(basen
 split -b "$IMAGE_CHUNK_SIZE" -d -a 3 \
   "$ARTIFACT_DIR/$(basename "$IMAGE_FILE").zst" \
   "$ARTIFACT_DIR/$(basename "$IMAGE_FILE").zst.part-"
-sha256sum "$ARTIFACT_DIR"/* > "$ARTIFACT_DIR/SHA256SUMS.txt"
+sudo sha256sum "$ARTIFACT_DIR"/* | sudo tee "$ARTIFACT_DIR/SHA256SUMS.txt" > /dev/null
+sudo chown "$(id -u):$(id -g)" "$ARTIFACT_DIR/SHA256SUMS.txt"
 
 cat > "$ARTIFACT_DIR/release-info.txt" <<EOF
 Distribution: Fedora ${FEDORA_RELEASE} (Minimal GNOME)
@@ -26,6 +27,10 @@ Bootloader: GRUB2 (BLS disabled, traditional grub.cfg)
 Image File: $(basename "$IMAGE_FILE")
 Compressed File: $(basename "$IMAGE_FILE").zst
 Build Time (UTC): $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+Reassemble + Decompress:
+cat $(basename "$IMAGE_FILE").zst.part-* > $(basename "$IMAGE_FILE").zst
+zstd -d $(basename "$IMAGE_FILE").zst -o $(basename "$IMAGE_FILE")
 EOF
 
 TAG_NAME="fedora${FEDORA_RELEASE}-${KREL}-$(date -u +%Y%m%d%H%M%S)"
