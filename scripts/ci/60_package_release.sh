@@ -9,35 +9,60 @@ set -euo pipefail
 : "${KERNEL_TAG:?missing KERNEL_TAG}"
 
 KREL="$(cat "$WORKDIR/kernel-release.txt")"
+IMAGE_BASENAME="$(basename "$IMAGE_FILE")"
+ZST_FILE="$ARTIFACT_DIR/${IMAGE_BASENAME}.zst"
+SPLIT_THRESHOLD_BYTES=$((2 * 1024 * 1024 * 1024))
 
 cp "$IMAGE_FILE" "$ARTIFACT_DIR/"
-zstd -T0 -19 "$ARTIFACT_DIR/$(basename "$IMAGE_FILE")" -o "$ARTIFACT_DIR/$(basename "$IMAGE_FILE").zst"
-split -b "$IMAGE_CHUNK_SIZE" -d -a 3 \
-  "$ARTIFACT_DIR/$(basename "$IMAGE_FILE").zst" \
-  "$ARTIFACT_DIR/$(basename "$IMAGE_FILE").zst.part-"
+zstd -T0 -19 "$ARTIFACT_DIR/$IMAGE_BASENAME" -o "$ZST_FILE"
 
-sudo sha256sum \
-  "$ARTIFACT_DIR/gaokun3_defconfig" \
-  "$ARTIFACT_DIR/$(basename "$IMAGE_FILE").zst.part-"* \
-  | sudo tee "$ARTIFACT_DIR/SHA256SUMS.txt" > /dev/null
-sudo chown "$(id -u):$(id -g)" "$ARTIFACT_DIR/SHA256SUMS.txt"
-
-cat > "$ARTIFACT_DIR/release-info.txt" <<EOF
+if [ "$(stat -c '%s' "$ZST_FILE")" -lt "$SPLIT_THRESHOLD_BYTES" ]; then
+  PACKAGE_GLOB="${IMAGE_BASENAME}.zst"
+  sudo sha256sum \
+    "$ARTIFACT_DIR/gaokun3_defconfig" \
+    "$ZST_FILE" \
+    | sudo tee "$ARTIFACT_DIR/SHA256SUMS.txt" > /dev/null
+  cat > "$ARTIFACT_DIR/release-info.txt" <<EOF
 Distribution: Fedora ${FEDORA_RELEASE} (Minimal GNOME)
 Kernel Tag: ${KERNEL_TAG}
 Kernel Release: ${KREL}
 Architecture: arm64
+Root Filesystem: Btrfs (@, @home)
 Bootloader: GRUB2 (BLS disabled, traditional grub.cfg)
-Image File: $(basename "$IMAGE_FILE")
-Compressed File: $(basename "$IMAGE_FILE").zst
+Image File: ${IMAGE_BASENAME}
+Compressed File: ${IMAGE_BASENAME}.zst
+Build Time (UTC): $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+EOF
+else
+  split -b "$IMAGE_CHUNK_SIZE" -d -a 3 \
+    "$ZST_FILE" \
+    "$ZST_FILE.part-"
+  PACKAGE_GLOB="${IMAGE_BASENAME}.zst.part-*"
+  sudo sha256sum \
+    "$ARTIFACT_DIR/gaokun3_defconfig" \
+    "$ZST_FILE.part-"* \
+    | sudo tee "$ARTIFACT_DIR/SHA256SUMS.txt" > /dev/null
+  cat > "$ARTIFACT_DIR/release-info.txt" <<EOF
+Distribution: Fedora ${FEDORA_RELEASE} (Minimal GNOME)
+Kernel Tag: ${KERNEL_TAG}
+Kernel Release: ${KREL}
+Architecture: arm64
+Root Filesystem: Btrfs (@, @home)
+Bootloader: GRUB2 (BLS disabled, traditional grub.cfg)
+Image File: ${IMAGE_BASENAME}
+Compressed File: ${IMAGE_BASENAME}.zst
 Build Time (UTC): $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 Reassemble + Decompress:
-cat $(basename "$IMAGE_FILE").zst.part-* > $(basename "$IMAGE_FILE").zst
-zstd -d $(basename "$IMAGE_FILE").zst -o $(basename "$IMAGE_FILE")
+cat ${IMAGE_BASENAME}.zst.part-* > ${IMAGE_BASENAME}.zst
+zstd -d ${IMAGE_BASENAME}.zst -o ${IMAGE_BASENAME}
 EOF
+fi
+
+sudo chown "$(id -u):$(id -g)" "$ARTIFACT_DIR/SHA256SUMS.txt"
 
 TAG_NAME="fedora${FEDORA_RELEASE}-${KREL}-$(date -u +%Y%m%d%H%M%S)"
 
 echo "$TAG_NAME" > "$WORKDIR/tag-name.txt"
 echo "$KREL" > "$WORKDIR/kernel-release-export.txt"
+echo "$PACKAGE_GLOB" > "$WORKDIR/package-glob.txt"

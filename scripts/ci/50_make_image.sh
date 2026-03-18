@@ -13,11 +13,11 @@ truncate -s "$IMAGE_SIZE" "$IMAGE_FILE"
 parted -s "$IMAGE_FILE" mklabel gpt
 parted -s "$IMAGE_FILE" mkpart EFI fat32 1MiB 256MiB
 parted -s "$IMAGE_FILE" set 1 esp on
-parted -s "$IMAGE_FILE" mkpart rootfs ext4 256MiB 100%
+parted -s "$IMAGE_FILE" mkpart rootfs btrfs 256MiB 100%
 
 LOOP="$(sudo losetup --show -fP "$IMAGE_FILE")"
 sudo mkfs.vfat -F32 -n EFI "${LOOP}p1"
-sudo mkfs.ext4 -L rootfs "${LOOP}p2"
+sudo mkfs.btrfs -f -L rootfs "${LOOP}p2"
 
 EFI_UUID="$(sudo blkid -s UUID -o value "${LOOP}p1")"
 ROOT_UUID="$(sudo blkid -s UUID -o value "${LOOP}p2")"
@@ -27,6 +27,7 @@ cleanup() {
   set +e
   sudo umount "$MNT/dev/pts" 2>/dev/null || true
   sudo umount "$MNT/boot/efi" 2>/dev/null || true
+  sudo umount "$MNT/home" 2>/dev/null || true
   sudo umount "$MNT/dev" 2>/dev/null || true
   sudo umount "$MNT/proc" 2>/dev/null || true
   sudo umount "$MNT/sys" 2>/dev/null || true
@@ -38,14 +39,21 @@ trap cleanup EXIT
 
 sudo mkdir -p "$MNT"
 sudo mount "${LOOP}p2" "$MNT"
+sudo btrfs subvolume create "$MNT/@"
+sudo btrfs subvolume create "$MNT/@home"
+sudo umount "$MNT"
+sudo mount -o subvol=@ "${LOOP}p2" "$MNT"
+sudo mkdir -p "$MNT/home"
+sudo mount -o subvol=@home "${LOOP}p2" "$MNT/home"
 sudo mkdir -p "$MNT/boot/efi"
 sudo mount "${LOOP}p1" "$MNT/boot/efi"
 
 sudo rsync -aHAX "$ROOTFS_DIR/" "$MNT/"
 
 sudo tee "$MNT/etc/fstab" >/dev/null <<EOF
-UUID=${ROOT_UUID}  /         ext4   defaults,noatime  0  1
-UUID=${EFI_UUID}   /boot/efi vfat   defaults          0  2
+UUID=${ROOT_UUID}  /         btrfs  subvol=@,compress=zstd:1,ssd,noatime  0  0
+UUID=${ROOT_UUID}  /home     btrfs  subvol=@home,compress=zstd:1,ssd,noatime  0  0
+UUID=${EFI_UUID}   /boot/efi vfat   defaults,nofail,x-systemd.device-timeout=10s  0  2
 EOF
 
 sudo mount --bind /dev "$MNT/dev"
@@ -68,12 +76,15 @@ mkdir -p /etc/modules-load.d
 echo -e "pci-pwrctrl-pwrseq\nath11k_pci" > /etc/modules-load.d/wifi.conf
 echo "btqca" > /etc/modules-load.d/bluetooth.conf
 echo -e "panel-himax-hx83121a\nmsm\nhid_multitouch" > /etc/modules-load.d/display.conf
+echo -e "lpasscc_sc8280xp\nsnd-soc-sc8280xp" > /etc/modules-load.d/audio.conf
 echo -e "huawei-gaokun-ec\nhuawei-gaokun-battery\nucsi_huawei_gaokun" > /etc/modules-load.d/battery.conf
+
+mkdir -p /etc/modprobe.d
+echo "softdep pinctrl_sc8280xp_lpass_lpi pre: lpasscc_sc8280xp" > /etc/modprobe.d/audio-deps.conf
 
 cat > /etc/dracut.conf.d/matebook.conf <<MODEOF
 hostonly="no"
-add_drivers+=" nvme phy-qcom-qmp-pcie phy-qcom-qmp-combo phy-qcom-qmp-usb phy-qcom-snps-femto-v2 usb-storage uas typec panel-himax-hx83121a msm i2c-hid-of "
-install_items+=" /lib/firmware/qcom/a660_sqe.fw /lib/firmware/qcom/a660_gmu.bin /lib/firmware/qcom/sc8280xp/HUAWEI/gaokun3/* "
+add_drivers+=" btrfs nvme phy-qcom-qmp-pcie phy-qcom-qmp-combo phy-qcom-qmp-usb phy-qcom-snps-femto-v2 usb-storage uas typec pci-pwrctrl-pwrseq ath11k ath11k_pci panel-himax-hx83121a msm i2c-hid-of lpasscc_sc8280xp snd-soc-sc8280xp pinctrl_sc8280xp_lpass_lpi "
 MODEOF
 
 dracut --force --kver "$KREL"
@@ -83,7 +94,7 @@ GRUB_DEFAULT=saved
 GRUB_TIMEOUT=5
 GRUB_DISTRIBUTOR="Fedora"
 GRUB_ENABLE_BLSCFG=false
-GRUB_CMDLINE_LINUX="rhgb clk_ignore_unused pd_ignore_unused arm64.nopauth iommu.passthrough=0 iommu.strict=0 pcie_aspm.policy=powersupersave modprobe.blacklist=simpledrm efi=noruntime fbcon=rotate:1 usbhid.quirks=0x12d1:0x10b8:0x20000000 consoleblank=0 loglevel=4"
+GRUB_CMDLINE_LINUX="clk_ignore_unused pd_ignore_unused arm64.nopauth iommu.passthrough=0 iommu.strict=0 pcie_aspm.policy=powersupersave modprobe.blacklist=simpledrm efi=noruntime fbcon=rotate:1 usbhid.quirks=0x12d1:0x10b8:0x20000000 consoleblank=0 loglevel=4"
 GRUB_DEFAULT_DTB="qcom/sc8280xp-huawei-gaokun3.dtb"
 GRUBEOF
 
@@ -94,8 +105,17 @@ ROOT_UUID="$(blkid -s UUID -o value /dev/disk/by-label/rootfs)"
 mkdir -p /boot/efi/EFI/BOOT /boot/efi/EFI/fedora
 cat > /boot/efi/EFI/BOOT/grub.cfg <<EOF
 search --no-floppy --fs-uuid --set=root ${ROOT_UUID}
-set prefix=(\$root)/boot/grub2
-configfile (\$root)/boot/grub2/grub.cfg
+if [ -f (\$root)/@/boot/grub2/grub.cfg ]; then
+    set prefix=(\$root)/@/boot/grub2
+    configfile (\$root)/@/boot/grub2/grub.cfg
+elif [ -f (\$root)/boot/grub2/grub.cfg ]; then
+    set prefix=(\$root)/boot/grub2
+    configfile (\$root)/boot/grub2/grub.cfg
+else
+    echo "ERROR: grub.cfg not found on rootfs UUID ${ROOT_UUID}"
+    echo "Tried: /@/boot/grub2/grub.cfg and /boot/grub2/grub.cfg"
+    sleep 5
+fi
 EOF
 cp /boot/efi/EFI/BOOT/grub.cfg /boot/efi/EFI/fedora/grub.cfg
 

@@ -30,8 +30,7 @@ jobs:
       KERN_OUT: ${{ github.workspace }}/build-fedora/kernel-out
       ROOTFS_DIR: ${{ github.workspace }}/build-fedora/rootfs
       ARTIFACT_DIR: ${{ github.workspace }}/build-fedora/artifacts
-      FW_CACHE_DIR: ${{ github.workspace }}/.cache/firmware
-      FW_BUILD_DIR: ${{ github.workspace }}/build-fedora/firmware-build
+      FW_REPO: ${{ github.workspace }}/firmware-huawei-gaokun3_minimal
       IMAGE_FILE: ${{ github.workspace }}/build-fedora/fedora-${{ github.event.inputs.fedora_release }}-gaokun3.img
 
     steps:
@@ -46,13 +45,6 @@ jobs:
           fetch-depth: 1
           path: build-fedora/mainline-linux
 
-      - name: Checkout device tools repo
-        uses: actions/checkout@v4
-        with:
-          repository: whitelewi1-ctrl/matebook-e-go-linux
-          fetch-depth: 1
-          path: matebook-e-go-linux
-
       - name: Install host dependencies
         run: |
           set -euxo pipefail
@@ -60,8 +52,8 @@ jobs:
           sudo apt-get install -y \
             git make bc bison flex cpio rsync kmod fakeroot \
             libssl-dev libelf-dev dwarves ccache \
-            dnf libarchive-tools wget unzip curl jq \
-            parted dosfstools e2fsprogs zstd xz-utils
+            dnf curl jq \
+            parted dosfstools e2fsprogs btrfs-progs zstd xz-utils python3
 
       - name: Restore caches
         uses: actions/cache@v4
@@ -69,10 +61,7 @@ jobs:
           path: |
             ~/.ccache
             ~/.cache/dnf
-            ${{ github.workspace }}/.cache/firmware/linux-firmware
-            ${{ github.workspace }}/.cache/firmware/uup-drivers
-            ${{ github.workspace }}/.cache/firmware/uup-drivers.zip
-          key: gaokun3-fedora-${{ env.FEDORA_RELEASE }}-${{ env.KERNEL_TAG }}-${{ hashFiles('gaokun-patches/*.patch') }}
+          key: gaokun3-fedora-${{ env.FEDORA_RELEASE }}-${{ env.KERNEL_TAG }}-${{ hashFiles('gaokun-patches/*.patch', 'scripts/ci/*.sh', 'tools/**', 'firmware-huawei-gaokun3_minimal/**') }}
           restore-keys: |
             gaokun3-fedora-${{ env.FEDORA_RELEASE }}-${{ env.KERNEL_TAG }}-
             gaokun3-fedora-${{ env.FEDORA_RELEASE }}-
@@ -80,7 +69,8 @@ jobs:
       - name: Prepare build workspace
         run: |
           set -euxo pipefail
-          mkdir -p "$WORKDIR" "$KERN_OUT" "$ROOTFS_DIR" "$ARTIFACT_DIR" "$FW_CACHE_DIR"
+          test -d "$FW_REPO"
+          mkdir -p "$WORKDIR" "$KERN_OUT" "$ROOTFS_DIR" "$ARTIFACT_DIR"
 
       - name: Apply patches and build kernel
         id: kernel
@@ -121,12 +111,13 @@ jobs:
             install \
             @gnome-desktop \
             passwd dnf sudo udev \
-            linux-firmware bluez dracut dracut-network btrfs-progs \
+            bluez dracut dracut-network btrfs-progs \
             grub2-efi-aa64 grub2-efi-aa64-modules efibootmgr shim-aa64 \
+            wpa_supplicant iw wireless-regdb \
             gnome-tweaks flatpak google-noto-sans-cjk-fonts adwaita-mono-fonts \
             fcitx5-chinese-addons fcitx5-configtool \
             parted iproute net-tools traceroute ncat telnet iputils which \
-            vim git openssh-server curl htop fastfetch screen nano firefox
+            f44-backgrounds-gnome mpv vim git openssh-server curl htop fastfetch screen nano firefox
 
       - name: Populate rootfs (kernel + firmware + tools)
         run: |
@@ -142,9 +133,11 @@ jobs:
           scripts/ci/60_package_release.sh
           TAG_NAME="$(cat "$WORKDIR/tag-name.txt")"
           KREL="$(cat "$WORKDIR/kernel-release-export.txt")"
+          PACKAGE_GLOB="$(cat "$WORKDIR/package-glob.txt")"
           echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
           echo "artifact_dir=$ARTIFACT_DIR" >> "$GITHUB_OUTPUT"
           echo "kernel_release=$KREL" >> "$GITHUB_OUTPUT"
+          echo "package_glob=$PACKAGE_GLOB" >> "$GITHUB_OUTPUT"
 
       - name: Upload build artifacts (workflow)
         uses: actions/upload-artifact@v4
@@ -154,7 +147,7 @@ jobs:
             ${{ steps.package.outputs.artifact_dir }}/gaokun3_defconfig
             ${{ steps.package.outputs.artifact_dir }}/release-info.txt
             ${{ steps.package.outputs.artifact_dir }}/SHA256SUMS.txt
-            ${{ steps.package.outputs.artifact_dir }}/*.zst.part-*
+            ${{ steps.package.outputs.artifact_dir }}/${{ steps.package.outputs.package_glob }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -166,4 +159,4 @@ jobs:
             ${{ steps.package.outputs.artifact_dir }}/gaokun3_defconfig
             ${{ steps.package.outputs.artifact_dir }}/release-info.txt
             ${{ steps.package.outputs.artifact_dir }}/SHA256SUMS.txt
-            ${{ steps.package.outputs.artifact_dir }}/*.zst.part-*
+            ${{ steps.package.outputs.artifact_dir }}/${{ steps.package.outputs.package_glob }}
