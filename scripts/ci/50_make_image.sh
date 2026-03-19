@@ -106,7 +106,7 @@ chown user:user /home/user/.config/monitors.xml
 GDM_DIR="/var/lib/gdm/seat0/config"
 mkdir -p "$GDM_DIR"
 cp /home/user/.config/monitors.xml "$GDM_DIR/monitors.xml"
-chown gdm:gdm "$GDM_DIR/monitors.xml"
+chown --reference="$GDM_DIR" "$GDM_DIR/monitors.xml"
 
 systemctl enable gdm NetworkManager sshd huawei-touchpad.service || true
 

@@ -269,7 +269,7 @@ chown user:user /home/user/.config/monitors.xml
 GDM_DIR="/var/lib/gdm/seat0/config"
 mkdir -p "$GDM_DIR"
 cp /home/user/.config/monitors.xml "$GDM_DIR/monitors.xml"
-chown gdm:gdm "$GDM_DIR/monitors.xml"
+chown --reference="$GDM_DIR" "$GDM_DIR/monitors.xml"
 
 # 开启图形、网络、SSH 和触控板服务
 systemctl enable gdm NetworkManager sshd huawei-touchpad.service
@@ -351,13 +351,17 @@ sudo losetup -d $LOOP
 $WORKDIR/fedora-44-gaokun3.img
 ```
 
-刷入设备：
+推荐先刷入 USB 存储：
 
 ```bash
 sudo dd if=$IMAGE_FILE of=/dev/sdX bs=4M status=progress conv=fsync
 ```
 
 也可以使用 `balenaEtcher`、`Rufus`、`gnome-disks` 等图形工具。
+
+刷入后开机按 `F12`，在 UEFI 启动菜单里选择对应的 USB 引导项启动。
+
+如果要写入机器内置 NVMe，还需要额外分区、复制系统并调整 EFI 引导项，不建议把上面的 `dd` 目标直接替换成内置盘设备名后盲刷。
 
 ---
 
@@ -366,3 +370,4 @@ sudo dd if=$IMAGE_FILE of=/dev/sdX bs=4M status=progress conv=fsync
 - 首次启动后如需扩容，可使用 `gnome-disks`，或执行 `btrfs filesystem resize max /`
 - 文中所有 `tools/` 与 firmware 都来自当前仓库，不依赖外部设备专属仓库
 - 如果你需要自动化构建，可直接参考 GitHub Actions workflow：`.github/workflows/fedora-gaokun3-release.yml`
+- 如果 GDM 登录界面的方向、主屏或外接显示器布局不对，先在用户会话里调好显示设置，再把 `~/.config/monitors.xml` 复制到 `/var/lib/gdm/seat0/config/monitors.xml`，并执行 `chown --reference=/var/lib/gdm/seat0/config /var/lib/gdm/seat0/config/monitors.xml`
