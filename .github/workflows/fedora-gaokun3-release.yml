@@ -52,7 +52,7 @@ jobs:
           sudo apt-get install -y \
             git make bc bison flex cpio rsync kmod fakeroot \
             libssl-dev libelf-dev dwarves ccache \
-            dnf curl jq \
+            curl jq \
             parted dosfstools e2fsprogs btrfs-progs zstd xz-utils python3
 
       - name: Restore ccache
@@ -81,35 +81,20 @@ jobs:
       - name: Bootstrap Fedora rootfs
         run: |
           set -euxo pipefail
-
-          KEY_DIR="$WORKDIR/keys"
-          mkdir -p "$KEY_DIR"
-          FEDORA_KEY_FILE="$KEY_DIR/RPM-GPG-KEY-fedora-${FEDORA_RELEASE}-primary"
-
-          if [ ! -s "$FEDORA_KEY_FILE" ]; then
-            curl -fsSL "https://fedoraproject.org/fedora.gpg" -o "$FEDORA_KEY_FILE"
-          fi
-
-          test -s "$FEDORA_KEY_FILE" || { echo "Failed to fetch Fedora GPG key from https://fedoraproject.org/fedora.gpg"; exit 1; }
-
-          sudo dnf --installroot="$ROOTFS_DIR" --releasever="$FEDORA_RELEASE" --forcearch=aarch64 -y \
-            --setopt=reposdir=/dev/null \
-            --setopt=fastestmirror=False \
-            --setopt=deltarpm=False \
-            --setopt=fedora.gpgcheck=1 \
-            --setopt=fedora.repo_gpgcheck=0 \
-            --setopt=fedora.gpgkey=file://${FEDORA_KEY_FILE} \
-            --setopt=updates.gpgcheck=1 \
-            --setopt=updates.repo_gpgcheck=0 \
-            --setopt=updates.gpgkey=file://${FEDORA_KEY_FILE} \
-            --repofrompath=fedora,https://dl.fedoraproject.org/pub/fedora/linux/releases/${FEDORA_RELEASE}/Everything/aarch64/os/ \
-            --repofrompath=updates,https://dl.fedoraproject.org/pub/fedora/linux/updates/${FEDORA_RELEASE}/Everything/aarch64/ \
-            --exclude=gnome-boxes,gnome-connections,gnome-browser-connector,snapshot,gnome-weather,gnome-contacts,gnome-maps,simple-scan,gnome-clocks,yelp,gnome-user-docs,gnome-calculator,gnome-calendar \
-            install \
-            @core @standard @gnome-desktop \
-            grub2-efi-aa64-modules efibootmgr shim-aa64 \
-            gnome-tweaks langpacks-zh_CN fcitx5-chinese-addons \
-            telnet mpv v4l-utils vim git htop fastfetch screen firefox
+          sudo docker run --rm \
+            -v "$GITHUB_WORKSPACE":"$GITHUB_WORKSPACE" \
+            -w "$GITHUB_WORKSPACE" \
+            --user root \
+            "fedora:${FEDORA_RELEASE}" \
+            bash -euxo pipefail -c '
+              dnf -y --installroot="'"$ROOTFS_DIR"'" --releasever="'"$FEDORA_RELEASE"'" --forcearch=aarch64 --use-host-config \
+                --exclude=gnome-boxes,gnome-connections,gnome-browser-connector,snapshot,gnome-weather,gnome-contacts,gnome-maps,simple-scan,gnome-clocks,yelp,gnome-user-docs,gnome-calculator,gnome-calendar \
+                install \
+                @core @standard @gnome-desktop \
+                grub2-efi-aa64-modules efibootmgr shim-aa64 \
+                gnome-tweaks langpacks-zh_CN fcitx5-chinese-addons \
+                telnet mpv v4l-utils vim git htop fastfetch screen firefox
+            '
 
       - name: Populate rootfs (kernel + firmware + tools)
         run: |
