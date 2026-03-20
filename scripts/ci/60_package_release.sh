@@ -7,6 +7,9 @@ set -euo pipefail
 : "${IMAGE_CHUNK_SIZE:?missing IMAGE_CHUNK_SIZE}"
 : "${FEDORA_RELEASE:?missing FEDORA_RELEASE}"
 : "${KERNEL_TAG:?missing KERNEL_TAG}"
+: "${DESKTOP_ENVIRONMENT:?missing DESKTOP_ENVIRONMENT}"
+: "${EXCLUDED_PACKAGES:?missing EXCLUDED_PACKAGES}"
+: "${EXTRA_PACKAGES:?missing EXTRA_PACKAGES}"
 
 KREL="$(cat "$WORKDIR/kernel-release.txt")"
 IMAGE_BASENAME="$(basename "$IMAGE_FILE")"
@@ -22,7 +25,7 @@ if [ "$(stat -c '%s' "$ZST_FILE")" -lt "$SPLIT_THRESHOLD_BYTES" ]; then
   cat > "$RELEASE_BODY_FILE" <<EOF
 ## Build Information
 
-- Distribution: Fedora Linux ${FEDORA_RELEASE} (Minimal GNOME)
+- Distribution: Fedora Linux ${FEDORA_RELEASE}
 - Kernel Tag: ${KERNEL_TAG}
 - Kernel Release: ${KREL}
 - Architecture: arm64
@@ -31,6 +34,12 @@ if [ "$(stat -c '%s' "$ZST_FILE")" -lt "$SPLIT_THRESHOLD_BYTES" ]; then
 - Image File: ${IMAGE_BASENAME}
 - Compressed File: ${IMAGE_BASENAME}.zst
 - Build Time (UTC): $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+## Rootfs Selection
+
+- Desktop Environment: ${DESKTOP_ENVIRONMENT}
+- Excluded Packages: ${EXCLUDED_PACKAGES}
+- Extra Packages: ${EXTRA_PACKAGES}
 
 ## Default Login
 
@@ -45,7 +54,7 @@ else
   cat > "$RELEASE_BODY_FILE" <<EOF
 ## Build Information
 
-- Distribution: Fedora ${FEDORA_RELEASE} (Minimal GNOME)
+- Distribution: Fedora Linux ${FEDORA_RELEASE}
 - Kernel Tag: ${KERNEL_TAG}
 - Kernel Release: ${KREL}
 - Architecture: arm64
@@ -54,6 +63,12 @@ else
 - Image File: ${IMAGE_BASENAME}
 - Compressed File: ${IMAGE_BASENAME}.zst
 - Build Time (UTC): $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+## Rootfs Selection
+
+- Desktop Environment: ${DESKTOP_ENVIRONMENT}
+- Excluded Packages: ${EXCLUDED_PACKAGES}
+- Extra Packages: ${EXTRA_PACKAGES}
 
 ## Default Login
 
