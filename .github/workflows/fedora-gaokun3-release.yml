@@ -107,7 +107,7 @@ jobs:
                 install \
                 @core @standard "'"$DESKTOP_ENVIRONMENT"'" \
                 grub2-efi-aa64-modules efibootmgr shim-aa64 \
-                langpacks-en langpacks-zh_CN \
+                langpacks-en langpacks-zh_CN alsa-ucm \
                 '"$EXTRA_PACKAGES"'
             '
 

@@ -118,7 +118,7 @@ sudo dnf --installroot=$ROOTFS_DIR --releasever=44 --forcearch=aarch64 --use-hos
     @core @standard @gnome-desktop \
     grub2-efi-aa64-modules efibootmgr shim-aa64 \
     gnome-tweaks \
-    langpacks-en langpacks-zh_CN \
+    langpacks-en langpacks-zh_CN alsa-ucm \
     fcitx5-chinese-addons \
     telnet mpv v4l-utils vim git htop fastfetch screen firefox
 ```
