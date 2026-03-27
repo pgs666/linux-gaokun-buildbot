@@ -1,17 +1,17 @@
-From f0f0565cd4936bd39de7c10d9723e80abf84e9cf Mon Sep 17 00:00:00 2001
+From f157bc8ea35954e8984568c5b750972abde78dd7 Mon Sep 17 00:00:00 2001
 From: wano <multicolor@sjtu.edu.cn>
-Date: Sat, 21 Mar 2026 13:04:25 +0800
+Date: Fri, 27 Mar 2026 22:32:47 +0800
 Subject: [PATCH] Input: touchscreen: add Himax HX83121A SPI driver
 
 ---
  drivers/input/touchscreen/Kconfig             |   12 +
  drivers/input/touchscreen/Makefile            |    1 +
- .../input/touchscreen/himax_hx83121a_spi.c    | 1536 +++++++++++++++++
- 3 files changed, 1549 insertions(+)
+ .../input/touchscreen/himax_hx83121a_spi.c    | 1574 +++++++++++++++++
+ 3 files changed, 1587 insertions(+)
  create mode 100644 drivers/input/touchscreen/himax_hx83121a_spi.c
 
 diff --git a/drivers/input/touchscreen/Kconfig b/drivers/input/touchscreen/Kconfig
-index 7d5b72ee07fa..770f5f4e4546 100644
+index 7d5b72ee0..770f5f4e4 100644
 --- a/drivers/input/touchscreen/Kconfig
 +++ b/drivers/input/touchscreen/Kconfig
 @@ -1424,4 +1424,16 @@ config TOUCHSCREEN_HIMAX_HX83112B
@@ -32,7 +32,7 @@ index 7d5b72ee07fa..770f5f4e4546 100644
 +
  endif
 diff --git a/drivers/input/touchscreen/Makefile b/drivers/input/touchscreen/Makefile
-index ab9abd151078..47e700cd54d7 100644
+index ab9abd151..47e700cd5 100644
 --- a/drivers/input/touchscreen/Makefile
 +++ b/drivers/input/touchscreen/Makefile
 @@ -120,3 +120,4 @@ obj-$(CONFIG_TOUCHSCREEN_IQS5XX)	+= iqs5xx.o
@@ -42,10 +42,10 @@ index ab9abd151078..47e700cd54d7 100644
 +obj-$(CONFIG_TOUCHSCREEN_HIMAX_HX83121A_SPI)	+= himax_hx83121a_spi.o
 diff --git a/drivers/input/touchscreen/himax_hx83121a_spi.c b/drivers/input/touchscreen/himax_hx83121a_spi.c
 new file mode 100644
-index 000000000000..d640c74ae685
+index 000000000..a8049c542
 --- /dev/null
 +++ b/drivers/input/touchscreen/himax_hx83121a_spi.c
-@@ -0,0 +1,1536 @@
+@@ -0,0 +1,1574 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Himax SPI Driver
@@ -164,6 +164,8 @@ index 000000000000..d640c74ae685
 +	spinlock_t irq_lock;
 +	struct mutex op_lock;
 +	bool irq_enabled;
++	bool panel_prepared;
++	bool shutting_down;
 +	struct gpio_desc *gpiod_rst;
 +	struct device *dev;
 +	struct spi_device *spi;
@@ -439,6 +441,23 @@ index 000000000000..d640c74ae685
 +	spin_unlock_irqrestore(&ts->irq_lock, flags);
 +}
 +
++static void himax_quiesce_irq(struct himax_ts_data *ts)
++{
++	himax_int_enable(ts, false);
++	synchronize_irq(ts->spi->irq);
++}
++
++static void himax_lock(struct himax_ts_data *ts)
++{
++	himax_quiesce_irq(ts);
++	mutex_lock(&ts->op_lock);
++}
++
++static void himax_unlock(struct himax_ts_data *ts)
++{
++	mutex_unlock(&ts->op_lock);
++}
++
 +static void himax_mcu_ic_reset(struct himax_ts_data *ts, bool int_off)
 +{
 +	if (int_off)
@@ -673,7 +692,6 @@ index 000000000000..d640c74ae685
 +	u32 crc_hw;
 +	int ret;
 +
-+	himax_int_enable(ts, false);
 +	himax_release_all_touches(ts);
 +
 +	ret = hx83121a_chip_detect(ts);
@@ -734,7 +752,6 @@ index 000000000000..d640c74ae685
 +
 +static void himax_power_down(struct himax_ts_data *ts)
 +{
-+	himax_int_enable(ts, false);
 +	himax_release_all_touches(ts);
 +	gpiod_set_value_cansleep(ts->gpiod_rst, 1);
 +}
@@ -745,14 +762,20 @@ index 000000000000..d640c74ae685
 +						panel_follower);
 +	int ret;
 +
-+	mutex_lock(&ts->op_lock);
++	himax_lock(ts);
++	if (ts->shutting_down) {
++		himax_unlock(ts);
++		return 0;
++	}
++
 +	ret = himax_hw_reinit_retry(ts, false,
 +				    HIMAX_PANEL_REINIT_RETRIES,
 +				    HIMAX_PANEL_REINIT_DELAY_MS,
 +				    "panel");
++	ts->panel_prepared = !ret;
 +	if (ret)
 +		himax_power_down(ts);
-+	mutex_unlock(&ts->op_lock);
++	himax_unlock(ts);
 +
 +	return ret;
 +}
@@ -762,9 +785,10 @@ index 000000000000..d640c74ae685
 +	struct himax_ts_data *ts = container_of(follower, struct himax_ts_data,
 +						panel_follower);
 +
-+	mutex_lock(&ts->op_lock);
++	himax_lock(ts);
++	ts->panel_prepared = false;
 +	himax_power_down(ts);
-+	mutex_unlock(&ts->op_lock);
++	himax_unlock(ts);
 +
 +	return 0;
 +}
@@ -784,9 +808,20 @@ index 000000000000..d640c74ae685
 +	if (!do_reset)
 +		return count;
 +
-+	mutex_lock(&ts->op_lock);
++	himax_lock(ts);
++	if (ts->shutting_down) {
++		ret = -ENODEV;
++		goto out_unlock;
++	}
++
++	if (!ts->panel_prepared) {
++		ret = -EHOSTDOWN;
++		goto out_unlock;
++	}
++
 +	ret = himax_hw_reinit(ts, false);
-+	mutex_unlock(&ts->op_lock);
++out_unlock:
++	himax_unlock(ts);
 +	if (ret)
 +		return ret;
 +
@@ -824,7 +859,6 @@ index 000000000000..d640c74ae685
 +		return ret;
 +	}
 +
-+	drm_panel_put(panel);
 +	return 0;
 +}
 +
@@ -1550,8 +1584,12 @@ index 000000000000..d640c74ae685
 +{
 +	struct himax_ts_data *ts = spi_get_drvdata(spi);
 +
++	himax_lock(ts);
++	ts->shutting_down = true;
++	ts->panel_prepared = false;
 +	device_remove_file(ts->dev, &dev_attr_inplace_reset);
 +	himax_power_down(ts);
++	himax_unlock(ts);
 +}
 +
 +static const struct spi_device_id himax_spi_ids[] = {
