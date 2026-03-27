@@ -19,6 +19,9 @@ DEVEL_STAGE="$BUILDROOT_DIR/kernel-devel-gaokun"
 DEVEL_TREE="$DEVEL_STAGE/usr/src/kernels/$KREL"
 FIRMWARE_STAGE="$BUILDROOT_DIR/linux-firmware-gaokun"
 KREL_VERSION="${KREL//-/_}"
+RPM_BUILD_JOBS="${RPM_BUILD_JOBS:-$(nproc)}"
+RPM_PAYLOAD_LEVEL="${RPM_PAYLOAD_LEVEL:-2}"
+RPM_PAYLOAD_MACRO="w${RPM_PAYLOAD_LEVEL}T${RPM_BUILD_JOBS}.xzdio"
 
 mkdir -p \
   "$ARTIFACT_DIR" \
@@ -121,10 +124,30 @@ render_spec_template \
   "$GAOKUN_DIR/firmware/linux-firmware-gaokun.spec.in" \
   "$RPM_TOPDIR/SPECS/linux-firmware-gaokun.spec"
 
-rpmbuild --define "_topdir $RPM_TOPDIR" -bb "$RPM_TOPDIR/SPECS/kernel-gaokun.spec"
-rpmbuild --define "_topdir $RPM_TOPDIR" -bb "$RPM_TOPDIR/SPECS/kernel-modules-gaokun.spec"
-rpmbuild --define "_topdir $RPM_TOPDIR" -bb "$RPM_TOPDIR/SPECS/kernel-devel-gaokun.spec"
-rpmbuild --define "_topdir $RPM_TOPDIR" -bb "$RPM_TOPDIR/SPECS/linux-firmware-gaokun.spec"
+rpmbuild_common_args=(
+  --define "_topdir $RPM_TOPDIR"
+  --define "_binary_payload $RPM_PAYLOAD_MACRO"
+  --define "_source_payload $RPM_PAYLOAD_MACRO"
+)
+
+build_rpm_spec() {
+  local spec_path="$1"
+  rpmbuild "${rpmbuild_common_args[@]}" -bb "$spec_path"
+}
+
+build_rpm_spec "$RPM_TOPDIR/SPECS/kernel-gaokun.spec" &
+pid_kernel=$!
+build_rpm_spec "$RPM_TOPDIR/SPECS/kernel-modules-gaokun.spec" &
+pid_modules=$!
+build_rpm_spec "$RPM_TOPDIR/SPECS/kernel-devel-gaokun.spec" &
+pid_devel=$!
+build_rpm_spec "$RPM_TOPDIR/SPECS/linux-firmware-gaokun.spec" &
+pid_firmware=$!
+
+wait "$pid_kernel"
+wait "$pid_modules"
+wait "$pid_devel"
+wait "$pid_firmware"
 
 kernel_rpm_path="$(find "$RPM_TOPDIR/RPMS" -name 'kernel-gaokun-*.rpm' -print -quit)"
 kernel_modules_rpm_path="$(find "$RPM_TOPDIR/RPMS" -name 'kernel-modules-gaokun-*.rpm' -print -quit)"
