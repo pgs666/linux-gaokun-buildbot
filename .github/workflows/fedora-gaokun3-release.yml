@@ -83,7 +83,57 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          scripts/ci/30_fetch_package_rpms.sh
+          set -euxo pipefail
+          mkdir -p "$PACKAGE_RPMS_DIR"
+
+          api_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${PACKAGE_RELEASE_TAG}"
+          release_json="$WORKDIR/package-release.json"
+
+          curl -fsSL \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "$api_url" \
+            -o "$release_json"
+
+          asset_name="package-manifest.json"
+          asset_url="$(jq -r --arg name "$asset_name" '.assets[] | select(.name == $name) | .url' "$release_json")"
+
+          if [[ -z "$asset_url" || "$asset_url" == "null" ]]; then
+            echo "missing asset ${asset_name} in release ${PACKAGE_RELEASE_TAG}" >&2
+            exit 1
+          fi
+
+          curl -fsSL \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/octet-stream" \
+            "$asset_url" \
+            -o "$PACKAGE_RPMS_DIR/$asset_name"
+
+          manifest_path="$PACKAGE_RPMS_DIR/package-manifest.json"
+          manifest_kernel_tag="$(jq -r '.kernel_tag' "$manifest_path")"
+
+          if [[ "$manifest_kernel_tag" != "$KERNEL_TAG" ]]; then
+            echo "package release kernel tag mismatch: expected ${KERNEL_TAG}, got ${manifest_kernel_tag}" >&2
+            exit 1
+          fi
+
+          for asset_name in \
+            "$(jq -r '.packages.kernel' "$manifest_path")" \
+            "$(jq -r '.packages.kernel_modules' "$manifest_path")" \
+            "$(jq -r '.packages.firmware' "$manifest_path")"; do
+            asset_url="$(jq -r --arg name "$asset_name" '.assets[] | select(.name == $name) | .url' "$release_json")"
+
+            if [[ -z "$asset_url" || "$asset_url" == "null" ]]; then
+              echo "missing asset ${asset_name} in release ${PACKAGE_RELEASE_TAG}" >&2
+              exit 1
+            fi
+
+            curl -fsSL \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H "Accept: application/octet-stream" \
+              "$asset_url" \
+              -o "$PACKAGE_RPMS_DIR/$asset_name"
+          done
 
       - name: Bootstrap Fedora rootfs
         run: |
@@ -111,11 +161,48 @@ jobs:
 
       - name: Install gaokun package RPMs into rootfs
         run: |
-          scripts/ci/45_install_package_rpms.sh
+          set -euxo pipefail
+          manifest_path="$PACKAGE_RPMS_DIR/package-manifest.json"
+          manifest_kernel_release="$(jq -r '.kernel_release' "$manifest_path")"
+          kernel_rpm_name="$(jq -r '.packages.kernel' "$manifest_path")"
+          kernel_modules_rpm_name="$(jq -r '.packages.kernel_modules' "$manifest_path")"
+          firmware_rpm_name="$(jq -r '.packages.firmware' "$manifest_path")"
+          echo "$manifest_kernel_release" > "$WORKDIR/kernel-release.txt"
+
+          sudo docker run --rm \
+            -v "$(dirname "$ROOTFS_DIR")":"$(dirname "$ROOTFS_DIR")" \
+            -v "$PACKAGE_RPMS_DIR":"$PACKAGE_RPMS_DIR" \
+            -w / \
+            --user root \
+            "fedora:${FEDORA_RELEASE}" \
+            bash -euxo pipefail -c '
+              dnf -y --installroot="'"$ROOTFS_DIR"'" --releasever="'"$FEDORA_RELEASE"'" --use-host-config --nogpgcheck \
+                install \
+                "'"$PACKAGE_RPMS_DIR"'/'"$kernel_rpm_name"'" \
+                "'"$PACKAGE_RPMS_DIR"'/'"$kernel_modules_rpm_name"'" \
+                "'"$PACKAGE_RPMS_DIR"'/'"$firmware_rpm_name"'"
+            '
+
+          sudo depmod -b "$ROOTFS_DIR" -a "$manifest_kernel_release"
 
       - name: Populate rootfs (tools and services)
         run: |
-          scripts/ci/40_populate_rootfs.sh
+          set -euxo pipefail
+          sudo mkdir -p \
+            "$ROOTFS_DIR/usr/local/bin" \
+            "$ROOTFS_DIR/etc/systemd/system" \
+            "$ROOTFS_DIR/usr/share/alsa/ucm2/Qualcomm/sc8280xp"
+          sudo cp "$GAOKUN_DIR/tools/touchpad/huawei-tp-activate.py" "$ROOTFS_DIR/usr/local/bin/"
+          sudo cp "$GAOKUN_DIR/tools/touchpad/huawei-touchpad.service" "$ROOTFS_DIR/etc/systemd/system/"
+          sudo chmod +x "$ROOTFS_DIR/usr/local/bin/huawei-tp-activate.py"
+          sudo cp "$GAOKUN_DIR/tools/monitors/gdm-monitor-sync" "$ROOTFS_DIR/usr/local/bin/"
+          sudo cp "$GAOKUN_DIR/tools/monitors/gdm-monitor-sync.service" \
+            "$ROOTFS_DIR/etc/systemd/system/"
+          sudo chmod +x "$ROOTFS_DIR/usr/local/bin/gdm-monitor-sync"
+          sudo cp "$GAOKUN_DIR/tools/bluetooth/patch-nvm-bdaddr.py" "$ROOTFS_DIR/usr/local/bin/"
+          sudo chmod +x "$ROOTFS_DIR/usr/local/bin/patch-nvm-bdaddr.py"
+          sudo cp "$GAOKUN_DIR/tools/audio/sc8280xp.conf" \
+            "$ROOTFS_DIR/usr/share/alsa/ucm2/Qualcomm/sc8280xp/"
 
       - name: Create disk image and configure boot
         run: |
