@@ -117,14 +117,18 @@ jobs:
             exit 1
           fi
 
-          for asset_name in \
+          for raw_name in \
             "$(jq -r '.packages.image' "$manifest_path")" \
             "$(jq -r '.packages.modules' "$manifest_path")" \
             "$(jq -r '.packages.firmware' "$manifest_path")"; do
+
+            # GitHub Release attachment names cannot contain '~' and are automatically replaced with '.'
+            asset_name="${raw_name//\~/.}"
+            
             asset_url="$(jq -r --arg name "$asset_name" '.assets[] | select(.name == $name) | .url' "$release_json")"
 
             if [[ -z "$asset_url" || "$asset_url" == "null" ]]; then
-              echo "missing asset ${asset_name} in release ${PACKAGE_RELEASE_TAG}" >&2
+              echo "missing asset ${asset_name} in release ${PACKAGE_RELEASE_TAG} (original name: ${raw_name})" >&2
               exit 1
             fi
 
@@ -132,7 +136,7 @@ jobs:
               -H "Authorization: Bearer ${GITHUB_TOKEN}" \
               -H "Accept: application/octet-stream" \
               "$asset_url" \
-              -o "$PACKAGE_DEBS_DIR/$asset_name"
+              -o "$PACKAGE_DEBS_DIR/$raw_name"
           done
 
       - name: Bootstrap Ubuntu rootfs
