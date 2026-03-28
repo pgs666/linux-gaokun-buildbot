@@ -195,15 +195,19 @@ EOF
 grub-mkimage -c /tmp/early-grub.cfg \
     -o /boot/efi/EFI/BOOT/BOOTAA64.EFI \
     -O arm64-efi -p /boot/grub \
-    part_gpt ext2 fat search search_fs_uuid search_label normal linux echo
+    part_gpt ext2 fat search search_fs_uuid search_label normal linux \
+    configfile reboot echo test extcmd efifwsetup
 
 rm -f /tmp/early-grub.cfg
 update-grub
 
+mkdir -p /boot/grub/arm64-efi
+cp -a /usr/lib/grub/arm64-efi/. /boot/grub/arm64-efi/
+
 cat > /boot/efi/EFI/BOOT/grub.cfg <<EOF
 search --no-floppy --fs-uuid --set=root ${ROOT_UUID}
 set prefix=(\$root)/boot/grub
-configfile \$prefix/grub.cfg
+configfile (\$root)/boot/grub/grub.cfg
 EOF
 cp /boot/efi/EFI/BOOT/BOOTAA64.EFI /boot/efi/EFI/ubuntu/BOOTAA64.EFI
 cp /boot/efi/EFI/BOOT/grub.cfg /boot/efi/EFI/ubuntu/grub.cfg

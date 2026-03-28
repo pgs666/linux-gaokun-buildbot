@@ -470,10 +470,13 @@ EOF
 grub-mkimage -c /tmp/early-grub.cfg \
     -o /boot/efi/EFI/BOOT/BOOTAA64.EFI \
     -O arm64-efi -p /boot/grub \
-    part_gpt ext2 fat search search_fs_uuid search_label normal linux echo
+    part_gpt ext2 fat search search_fs_uuid search_label normal linux \
+    configfile reboot echo test extcmd efifwsetup
 
 rm -f /tmp/early-grub.cfg
 update-grub
+mkdir -p /boot/grub/arm64-efi
+cp -a /usr/lib/grub/arm64-efi/. /boot/grub/arm64-efi/
 sed -i 's/^GRUB_DISABLE_OS_PROBER=true$/GRUB_DISABLE_OS_PROBER=false/' /etc/default/grub
 
 sudo cp /boot/efi/EFI/BOOT/BOOTAA64.EFI /boot/efi/EFI/ubuntu/BOOTAA64.EFI
