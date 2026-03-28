@@ -231,7 +231,7 @@ sudo mount -o subvol=@var ${LOOP}p2 /mnt/ego-fedora/var
 sudo mkdir -p /mnt/ego-fedora/boot/efi
 sudo mount ${LOOP}p1 /mnt/ego-fedora/boot/efi
 
-sudo rsync -aHAX --info=progress2 $ROOTFS_DIR/ /mnt/ego-fedora/
+sudo rsync -aHAX --info=progress2 --exclude='/proc/*' --exclude='/sys/*' --exclude='/dev/*' --exclude='/run/*' $ROOTFS_DIR/ /mnt/ego-fedora/
 
 sudo tee /mnt/ego-fedora/etc/fstab > /dev/null <<EOF
 UUID=${ROOT_UUID}  /         btrfs  subvol=@,compress=zstd:1,ssd,noatime  0  0
