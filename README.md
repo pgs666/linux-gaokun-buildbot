@@ -31,3 +31,4 @@ The image pipeline now builds and installs a dedicated package set:
 - [whitelewi1-ctrl/matebook-e-go-linux](https://github.com/whitelewi1-ctrl/matebook-e-go-linux)
 - [gaokun on AUR](https://aur.archlinux.org/packages?O=0&K=gaokun)
 - [TheUnknownThing/linux-gaokun](https://github.com/TheUnknownThing/linux-gaokun)
+- [chenxuecong2/firmware-huawei-gaokun3](https://github.com/chenxuecong2/firmware-huawei-gaokun3)
