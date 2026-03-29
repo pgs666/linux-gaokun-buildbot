@@ -531,7 +531,7 @@ sudo dd if=$IMAGE_FILE of=/dev/sdX bs=4M status=progress conv=fsync
 - 首次启动后如需扩容 ext4，可使用 `gnome-disks`，或执行：
   ```bash
   lsblk
-  sudo growpart /dev/sda 2
+  sudo LC_ALL=C growpart /dev/sda 2
   sudo resize2fs /dev/sda2
   ```
   如果你的启动盘不是 `sda`，把上面的设备名替换成实际值即可。
