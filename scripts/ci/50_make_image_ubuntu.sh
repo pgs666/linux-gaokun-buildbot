@@ -210,7 +210,7 @@ search --no-floppy --fs-uuid --set=root ${ROOT_UUID}
 set prefix=(\$root)/boot/grub
 configfile (\$root)/boot/grub/grub.cfg
 EOF
-cp /boot/efi/EFI/BOOT/BOOTAA64.EFI /boot/efi/EFI/ubuntu/BOOTAA64.EFI
+cp /boot/efi/EFI/BOOT/BOOTAA64.EFI /boot/efi/EFI/ubuntu/grubaa64.efi
 cp /boot/efi/EFI/BOOT/grub.cfg /boot/efi/EFI/ubuntu/grub.cfg
 
 # Validate GRUB generated correctly

@@ -479,7 +479,7 @@ mkdir -p /boot/grub/arm64-efi
 cp -a /usr/lib/grub/arm64-efi/. /boot/grub/arm64-efi/
 sed -i 's/^GRUB_DISABLE_OS_PROBER=true$/GRUB_DISABLE_OS_PROBER=false/' /etc/default/grub
 
-sudo cp /boot/efi/EFI/BOOT/BOOTAA64.EFI /boot/efi/EFI/ubuntu/BOOTAA64.EFI
+sudo cp /boot/efi/EFI/BOOT/BOOTAA64.EFI /boot/efi/EFI/ubuntu/grubaa64.efi
 sudo bash -c "cat > /boot/efi/EFI/BOOT/grub.cfg <<EOF
 search --no-floppy --fs-uuid --set=root ${ROOT_UUID}
 set prefix=(\\\$root)/boot/grub
