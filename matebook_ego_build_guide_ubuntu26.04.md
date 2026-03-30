@@ -527,7 +527,6 @@ sudo dd if=$IMAGE_FILE of=/dev/sdX bs=4M status=progress conv=fsync
 
 ## 额外说明
 
-- 编译完成后可用 `grep CONFIG_TOUCHSCREEN_HIMAX_HX83121A_SPI $KERN_OUT/.config` 确认 SPI 触摸驱动已进入当前内核配置
 - 首次启动后如需扩容 ext4，可使用 `gnome-disks`，或执行：
   ```bash
   lsblk
@@ -538,3 +537,4 @@ sudo dd if=$IMAGE_FILE of=/dev/sdX bs=4M status=progress conv=fsync
 - 文中所有 `tools/` 与 firmware 都来自当前仓库，不依赖外部设备专属仓库
 - 如果你需要自动化构建，可直接参考 GitHub Actions workflow：`.github/workflows/ubuntu-gaokun3-release.yml`
 - 如果 GDM 登录界面的方向、主屏或外接显示器布局不对，先在用户会话里调好显示设置，再把 `~/.config/monitors.xml` 复制到 `/var/lib/gdm3/seat0/config/monitors.xml`，并执行 `chown --reference=/var/lib/gdm3/seat0/config /var/lib/gdm3/seat0/config/monitors.xml`
+- 如需安装 Linux 到内置 nvme 固态硬盘与 Windows 共存，推荐使用 [Simple Init](https://github.com/BigfootACA/simple-init) ([UEFI Binaries](https://github.com/rodriguezst/simple-init/releases/download/20241118/SimpleInit-AARCH64.efi)) 替换 `\EFI\BOOT\BOOTAA64.EFI` 以更方便地支持 Linux + Windows 多系统引导

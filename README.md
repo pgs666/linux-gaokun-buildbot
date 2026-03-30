@@ -20,6 +20,7 @@ The image pipeline now builds and installs a dedicated package set:
 
 ## Getting started
 
+- Dual-boot guide (Chinese): [dual_boot_guide.md](dual_boot_guide.md)
 - Build guide – Fedora 44 (Chinese): [matebook_ego_build_guide_fedora44.md](matebook_ego_build_guide_fedora44.md)
 - Build guide – Ubuntu 26.04 (Chinese): [matebook_ego_build_guide_ubuntu26.04.md](matebook_ego_build_guide_ubuntu26.04.md)
 - GitHub Actions – Fedora: [.github/workflows/fedora-gaokun3-release.yml](.github/workflows/fedora-gaokun3-release.yml)
