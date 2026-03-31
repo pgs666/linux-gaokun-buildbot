@@ -21,6 +21,7 @@ The image pipeline now builds and installs a dedicated package set:
 ## Getting started
 
 - Dual-boot guide (Chinese): [dual_boot_guide.md](dual_boot_guide.md)
+- EL2 + KVM guide (Chinese): [el2_kvm_guide.md](el2_kvm_guide.md)
 - Build guide – Fedora 44 (Chinese): [matebook_ego_build_guide_fedora44.md](matebook_ego_build_guide_fedora44.md)
 - Build guide – Ubuntu 26.04 (Chinese): [matebook_ego_build_guide_ubuntu26.04.md](matebook_ego_build_guide_ubuntu26.04.md)
 - GitHub Actions – Fedora: [.github/workflows/fedora-gaokun3-release.yml](.github/workflows/fedora-gaokun3-release.yml)
@@ -29,7 +30,10 @@ The image pipeline now builds and installs a dedicated package set:
 ## References
 
 - [right-0903/linux-gaokun](https://github.com/right-0903/linux-gaokun)
+- [TheUnknownThing/linux-gaokun](https://github.com/TheUnknownThing/linux-gaokun)
 - [whitelewi1-ctrl/matebook-e-go-linux](https://github.com/whitelewi1-ctrl/matebook-e-go-linux)
 - [gaokun on AUR](https://aur.archlinux.org/packages?O=0&K=gaokun)
-- [TheUnknownThing/linux-gaokun](https://github.com/TheUnknownThing/linux-gaokun)
 - [chenxuecong2/firmware-huawei-gaokun3](https://github.com/chenxuecong2/firmware-huawei-gaokun3)
+- [awarson2233/EGoTouchRev-rebuild](https://github.com/awarson2233/EGoTouchRev-rebuild)
+- [BigfootACA/simple-init](https://github.com/BigfootACA/simple-init)
+- [TravMurav/slbounce](https://github.com/TravMurav/slbounce)
