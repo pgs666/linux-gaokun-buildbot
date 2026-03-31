@@ -6,7 +6,7 @@ on:
       kernel_tag:
         description: Linux kernel tag
         required: true
-        default: "v7.0-rc5"
+        default: "v7.0-rc6"
       package_release_tag:
         description: Fixed GitHub release tag used for package assets
         required: true
