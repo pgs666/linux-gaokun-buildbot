@@ -1,7 +1,7 @@
 # Huawei MateBook E Go 2023 Ubuntu 26.04 手动构建指南
 
 > **目标机型**：Huawei MateBook E Go 2023 (`SC8280XP` / `gaokun3`)  
-> **目标系统**：Ubuntu 26.04 (Plucky Puffin) GNOME，systemd-boot 启动，ext4 根文件系统  
+> **目标系统**：Ubuntu 26.04 (Resolute Raccoon) GNOME，systemd-boot 启动，ext4 根文件系统  
 > **推荐宿主机**：Ubuntu/Debian 或其他支持 `debootstrap` 的发行版  
 > **仓库假设**：本文默认你当前仓库位于 `~/gaokun/linux-gaokun-buildbot`
 
@@ -126,7 +126,8 @@ ccache -s
 
 使用 Ubuntu 官方 `ubuntu-base` 预构建 rootfs 作为基础，然后通过 chroot 安装桌面环境与额外软件包。
 
-> 如果宿主机是 x86_64，需要拷贝 `qemu-aarch64-static` 到 rootfs 中以支持 chroot 执行 arm64 二进制。
+> 如果宿主机是 x86_64，需要拷贝 `qemu-aarch64-static` 到 rootfs 中以支持 chroot 执行 arm64 二进制。  
+> [avikivity/qemu-aarch64-static-fast](https://github.com/avikivity/qemu-aarch64-static-fast) 是一个 QEMU 用户态模拟器的参数包装器 (Wrapper)。它通过在运行时动态注入高性能 CPU 标志位（如 `pauth-impdef=on`），透明地提升 AArch64 程序在非原生环境下的运行效率。
 
 ```bash
 mkdir -p $ROOTFS_DIR
