@@ -96,10 +96,26 @@ Language=zh_CN.UTF-8
 EOF
 systemctl enable "$DISPLAY_MANAGER" NetworkManager sshd huawei-touchpad.service || true
 
+cat > /etc/modprobe.d/gaokun-touchscreen.conf <<'EOF'
+blacklist himax_hx83121a_spi
+install himax_hx83121a_spi /usr/bin/false
+EOF
+
+if [[ -d /usr/src/himax-spi-0.0 ]]; then
+  dkms remove -m himax-spi -v 0.0 --all || true
+  dkms add -m himax-spi -v 0.0
+  dkms build -m himax-spi -v 0.0 -k "$KREL"
+  dkms install -m himax-spi -v 0.0 -k "$KREL"
+  if [[ "$BUILD_EL2" == "true" && -n "$KREL_EL2" ]]; then
+    dkms build -m himax-spi -v 0.0 -k "$KREL_EL2"
+    dkms install -m himax-spi -v 0.0 -k "$KREL_EL2"
+  fi
+fi
+
 mkdir -p /etc/modules-load.d
 echo -e "pci-pwrctrl-pwrseq\nath11k_pci" > /etc/modules-load.d/wifi.conf
 echo "btqca" > /etc/modules-load.d/bluetooth.conf
-echo -e "panel-himax-hx83121a\nhimax_hx83121a_spi\nmsm\nhid_multitouch" > /etc/modules-load.d/display.conf
+echo -e "panel-himax-hx83121a\nhimax-spi\nmsm\nhid_multitouch" > /etc/modules-load.d/display.conf
 echo -e "lpasscc_sc8280xp\nsnd-soc-sc8280xp" > /etc/modules-load.d/audio.conf
 echo -e "huawei-gaokun-ec\nhuawei-gaokun-battery\nucsi_huawei_gaokun" > /etc/modules-load.d/battery.conf
 

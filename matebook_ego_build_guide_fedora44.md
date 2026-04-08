@@ -153,7 +153,8 @@ EOF
 sudo dnf --installroot=$ROOTFS_DIR --releasever=44 --forcearch=aarch64 --use-host-config -y \
     install \
     @kde-desktop-environment \
-    fcitx5-chinese-addons telnet mpv v4l-utils vim nano ripgrep git htop fastfetch screen firefox partitionmanager konsole kate dolphin
+    fcitx5-chinese-addons telnet mpv v4l-utils vim nano ripgrep git htop fastfetch screen firefox partitionmanager konsole kate dolphin \
+    dkms gcc make
 
 # 安装 RPMFusion 并添加 libavcodec-freeworld（硬解视频编码支持）
 sudo dnf --installroot=$ROOTFS_DIR --releasever=44 --forcearch=aarch64 --use-host-config -y \
@@ -230,6 +231,9 @@ sudo chmod +x $ROOTFS_DIR/usr/local/bin/patch-nvm-bdaddr.py
 
 sudo cp $GAOKUN_DIR/tools/audio/sc8280xp.conf \
     $ROOTFS_DIR/usr/share/alsa/ucm2/Qualcomm/sc8280xp/
+
+sudo cp -r $GAOKUN_DIR/tools/touchscreen-hx83121a-dkms \
+    $ROOTFS_DIR/usr/src/himax-spi-0.0
 ```
 
 ---
@@ -335,6 +339,20 @@ cat > /etc/kernel/devicetree <<EOF
 qcom/sc8280xp-huawei-gaokun3.dtb
 EOF
 
+cat > /etc/modprobe.d/gaokun-touchscreen.conf <<EOF
+blacklist himax_hx83121a_spi
+install himax_hx83121a_spi /usr/bin/false
+EOF
+
+dkms remove -m himax-spi -v 0.0 --all || true
+dkms add -m himax-spi -v 0.0
+dkms build -m himax-spi -v 0.0 -k $KREL
+dkms install -m himax-spi -v 0.0 -k $KREL
+if [ -n "$KREL_EL2" ]; then
+    dkms build -m himax-spi -v 0.0 -k $KREL_EL2
+    dkms install -m himax-spi -v 0.0 -k $KREL_EL2
+fi
+
 systemctl enable sddm NetworkManager sshd huawei-touchpad.service
 
 dracut --force --kver $KREL
@@ -397,6 +415,7 @@ exit
 - 默认使用 `--entry-token=machine-id`，因此条目名会变成 `/boot/efi/loader/entries/<machine-id>-<kernel-release>.conf`。
 - Fedora 44 的 `90-loaderentry.install` 会从 `/usr/lib/modules/<kernel-release>/dtb/` 查找设备树，所以 DTB 必须放到这个标准路径里。
 - Fedora 默认的 `51-dracut-rescue.install` 会额外生成 `0-rescue` 启动项，但这个救援项默认不带 `devicetree`，在 gaokun3 上不可用，因此这里显式将其禁用。
+- 触屏方面，这套 Fedora 方案会黑名单仓库内原有的 `himax_hx83121a_spi` 模块，并预装/编译 `EGoTouchRev-Linux` 的 DKMS 驱动 `himax-spi`。
 
 ### 4. 收尾清理
 
