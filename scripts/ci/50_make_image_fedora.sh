@@ -116,6 +116,28 @@ if [[ -d /usr/src/himax-spi-0.0 ]]; then
     fi
     dkms install -m himax-spi -v 0.0 -k "$KREL_EL2"
   fi
+
+  cleanup_packages=(kernel-devel-gaokun3)
+  if [[ "$BUILD_EL2" == "true" && -n "$KREL_EL2" ]]; then
+    cleanup_packages+=(kernel-devel-gaokun3-el2)
+  fi
+
+  dnf -y remove "${cleanup_packages[@]}" || true
+  dnf -y clean all || true
+
+  rm -rf \
+    /usr/src/kernels/"$KREL" \
+    /lib/modules/"$KREL"/build \
+    /lib/modules/"$KREL"/source \
+    /var/cache/dnf \
+    /var/cache/libdnf5
+
+  if [[ "$BUILD_EL2" == "true" && -n "$KREL_EL2" ]]; then
+    rm -rf \
+      /usr/src/kernels/"$KREL_EL2" \
+      /lib/modules/"$KREL_EL2"/build \
+      /lib/modules/"$KREL_EL2"/source
+  fi
 fi
 
 mkdir -p /etc/modules-load.d
