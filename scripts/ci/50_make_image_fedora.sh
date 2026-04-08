@@ -104,10 +104,16 @@ EOF
 if [[ -d /usr/src/himax-spi-0.0 ]]; then
   dkms remove -m himax-spi -v 0.0 --all || true
   dkms add -m himax-spi -v 0.0
-  dkms build -m himax-spi -v 0.0 -k "$KREL"
+  if ! dkms build -m himax-spi -v 0.0 -k "$KREL"; then
+    cat "/var/lib/dkms/himax-spi/0.0/build/make.log" || true
+    exit 1
+  fi
   dkms install -m himax-spi -v 0.0 -k "$KREL"
   if [[ "$BUILD_EL2" == "true" && -n "$KREL_EL2" ]]; then
-    dkms build -m himax-spi -v 0.0 -k "$KREL_EL2"
+    if ! dkms build -m himax-spi -v 0.0 -k "$KREL_EL2"; then
+      cat "/var/lib/dkms/himax-spi/0.0/build/make.log" || true
+      exit 1
+    fi
     dkms install -m himax-spi -v 0.0 -k "$KREL_EL2"
   fi
 fi

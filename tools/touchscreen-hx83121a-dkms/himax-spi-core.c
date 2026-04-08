@@ -1402,6 +1402,7 @@ static struct spi_driver himax_spi_driver = {
 };
 module_spi_driver(himax_spi_driver);
 
+MODULE_IMPORT_NS("DRM_PANEL");
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Pengyu Luo <mitltlatltl@gmail.com>");
 MODULE_DESCRIPTION("Himax HX83121A SPI touchscreen driver");
