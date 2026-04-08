@@ -114,7 +114,6 @@ EOF
 
   rsync -a --delete --exclude '.git' "$src_dir/" "$devel_tree/"
   rsync -a "$out_dir/" "$devel_tree/"
-  install -Dm644 "$src_dir/Makefile" "$devel_tree/Makefile"
   find "$devel_tree" -type f \
     \( -name '*.o' -o -name '*.ko' -o -name '*.a' -o -name '*.cmd' -o -name '*.mod' -o -name '*.mod.c' \) \
     -delete

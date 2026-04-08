@@ -54,7 +54,7 @@ Windows 一般可由 `systemd-boot` 自动探测，所以无需额外修改 Wind
 
 - 重启后应进入 `systemd-boot` 启动菜单。
 - 菜单中可选择启动 Windows 或 Linux 发行版。
-- 进入 Linux 发行版后可以使用 KDE 分区管理器等磁盘工具，或 growpart/resize2fs/btrfs 等命令扩容 rootfs 分区和文件系统到整个剩余空间。
+- 进入 Linux 发行版后可以使用 gnome-disk 等磁盘工具或 growpart/resize2fs/btrfs 等命令扩容 rootfs 分区和文件系统到整个剩余空间。
 
 ## 补充说明（EL2 可选）
 

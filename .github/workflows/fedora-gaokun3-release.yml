@@ -22,7 +22,7 @@ on:
       extra_packages:
         description: Extra packages to install (space-separated)
         required: true
-        default: "fcitx5-chinese-addons telnet mpv v4l-utils vim nano ripgrep git htop fastfetch screen firefox partitionmanager konsole kate dolphin"
+        default: "fcitx5-chinese-addons telnet mpv v4l-utils vim nano ripgrep git htop fastfetch screen firefox kscreen sddm"
       build_el2:
         description: Build and include optional -gaokun3-el2 kernel and EL2 EFI payloads
         required: true
@@ -76,7 +76,7 @@ jobs:
           set -euxo pipefail
           sudo apt-get update
           sudo apt-get install -y \
-            rsync kmod curl jq p7zip-full \
+            rsync kmod curl jq \
             parted dosfstools e2fsprogs btrfs-progs zstd xz-utils python3
 
       - name: Prepare build workspace
@@ -164,7 +164,6 @@ jobs:
           asset_names=(
             "$(jq -r '.kernels.standard.packages.kernel' "$manifest_path")"
             "$(jq -r '.kernels.standard.packages.kernel_modules' "$manifest_path")"
-            "$(jq -r '.kernels.standard.packages.kernel_devel' "$manifest_path")"
             "$(jq -r '.packages.firmware' "$manifest_path")"
           )
 
@@ -172,7 +171,6 @@ jobs:
             asset_names+=(
               "$(jq -r '.kernels.el2.packages.kernel' "$manifest_path")"
               "$(jq -r '.kernels.el2.packages.kernel_modules' "$manifest_path")"
-              "$(jq -r '.kernels.el2.packages.kernel_devel' "$manifest_path")"
             )
           fi
 
@@ -210,7 +208,6 @@ jobs:
                 install \
                 @core @standard "'"$DESKTOP_ENVIRONMENT"'" \
                 systemd-boot-unsigned alsa-ucm \
-                dkms gcc make \
                 langpacks-en langpacks-zh_CN \
                 google-noto-color-emoji-fonts google-noto-emoji-fonts \
                 alsa-utils pipewire-utils \
@@ -236,19 +233,16 @@ jobs:
           manifest_kernel_release="$(jq -r '.kernels.standard.release' "$manifest_path")"
           kernel_rpm_name="$(jq -r '.kernels.standard.packages.kernel' "$manifest_path")"
           kernel_modules_rpm_name="$(jq -r '.kernels.standard.packages.kernel_modules' "$manifest_path")"
-          kernel_devel_rpm_name="$(jq -r '.kernels.standard.packages.kernel_devel' "$manifest_path")"
           firmware_rpm_name="$(jq -r '.packages.firmware' "$manifest_path")"
           echo "$manifest_kernel_release" > "$WORKDIR/kernel-release.txt"
 
           el2_kernel_release=""
           el2_kernel_rpm_name=""
           el2_kernel_modules_rpm_name=""
-          el2_kernel_devel_rpm_name=""
           if [[ "$BUILD_EL2" == "true" ]]; then
             el2_kernel_release="$(jq -r '.kernels.el2.release' "$manifest_path")"
             el2_kernel_rpm_name="$(jq -r '.kernels.el2.packages.kernel' "$manifest_path")"
             el2_kernel_modules_rpm_name="$(jq -r '.kernels.el2.packages.kernel_modules' "$manifest_path")"
-            el2_kernel_devel_rpm_name="$(jq -r '.kernels.el2.packages.kernel_devel' "$manifest_path")"
             echo "$el2_kernel_release" > "$WORKDIR/kernel-release-el2.txt"
           else
             rm -f "$WORKDIR/kernel-release-el2.txt"
@@ -257,14 +251,12 @@ jobs:
           rpm_install_args=(
             "\"$PACKAGE_RPMS_DIR/$kernel_rpm_name\""
             "\"$PACKAGE_RPMS_DIR/$kernel_modules_rpm_name\""
-            "\"$PACKAGE_RPMS_DIR/$kernel_devel_rpm_name\""
             "\"$PACKAGE_RPMS_DIR/$firmware_rpm_name\""
           )
           if [[ "$BUILD_EL2" == "true" ]]; then
             rpm_install_args+=(
               "\"$PACKAGE_RPMS_DIR/$el2_kernel_rpm_name\""
               "\"$PACKAGE_RPMS_DIR/$el2_kernel_modules_rpm_name\""
-              "\"$PACKAGE_RPMS_DIR/$el2_kernel_devel_rpm_name\""
             )
           fi
           rpm_install_args_string="$(printf '%s ' "${rpm_install_args[@]}")"
@@ -299,7 +291,6 @@ jobs:
           sudo mkdir -p \
             "$ROOTFS_DIR/usr/local/bin" \
             "$ROOTFS_DIR/etc/systemd/system" \
-            "$ROOTFS_DIR/usr/src" \
             "$ROOTFS_DIR/usr/share/alsa/ucm2/Qualcomm/sc8280xp"
           sudo cp "$GAOKUN_DIR/tools/touchpad/huawei-tp-activate.py" "$ROOTFS_DIR/usr/local/bin/"
           sudo cp "$GAOKUN_DIR/tools/touchpad/huawei-touchpad.service" "$ROOTFS_DIR/etc/systemd/system/"
@@ -308,8 +299,6 @@ jobs:
           sudo chmod +x "$ROOTFS_DIR/usr/local/bin/patch-nvm-bdaddr.py"
           sudo cp "$GAOKUN_DIR/tools/audio/sc8280xp.conf" \
             "$ROOTFS_DIR/usr/share/alsa/ucm2/Qualcomm/sc8280xp/"
-          sudo cp -r "$GAOKUN_DIR/tools/touchscreen-hx83121a-dkms" \
-            "$ROOTFS_DIR/usr/src/himax-spi-0.0"
 
       - name: Create disk image and configure boot
         run: |

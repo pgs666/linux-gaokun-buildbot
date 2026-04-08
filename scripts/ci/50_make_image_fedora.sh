@@ -10,7 +10,6 @@ set -euo pipefail
 : "${FEDORA_RELEASE:?missing FEDORA_RELEASE}"
 
 BUILD_EL2="${BUILD_EL2:-false}"
-DESKTOP_ENVIRONMENT="${DESKTOP_ENVIRONMENT:-@kde-desktop-environment}"
 DISPLAY_MANAGER="sddm"
 KREL="$(cat "$WORKDIR/kernel-release.txt")"
 KREL_EL2=""
@@ -96,59 +95,53 @@ Language=zh_CN.UTF-8
 EOF
 systemctl enable "$DISPLAY_MANAGER" NetworkManager sshd huawei-touchpad.service || true
 
-cat > /etc/modprobe.d/gaokun-touchscreen.conf <<'EOF'
-blacklist himax_hx83121a_spi
-install himax_hx83121a_spi /usr/bin/false
-EOF
+install -d -m 0755 /usr/local/bin /etc/xdg/autostart
+cat > /usr/local/bin/gaokun3-kde-firstboot-display.sh <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
 
-if [[ -d /usr/src/himax-spi-0.0 ]]; then
-  dkms remove -m himax-spi -v 0.0 --all || true
-  dkms add -m himax-spi -v 0.0
-  if ! dkms build -m himax-spi -v 0.0 -k "$KREL"; then
-    cat "/var/lib/dkms/himax-spi/0.0/build/make.log" || true
-    exit 1
-  fi
-  dkms install -m himax-spi -v 0.0 -k "$KREL"
-  if [[ "$BUILD_EL2" == "true" && -n "$KREL_EL2" ]]; then
-    if ! dkms build -m himax-spi -v 0.0 -k "$KREL_EL2"; then
-      cat "/var/lib/dkms/himax-spi/0.0/build/make.log" || true
-      exit 1
-    fi
-    dkms install -m himax-spi -v 0.0 -k "$KREL_EL2"
-  fi
-
-  cleanup_packages=(kernel-devel-gaokun3)
-  if [[ "$BUILD_EL2" == "true" && -n "$KREL_EL2" ]]; then
-    cleanup_packages+=(kernel-devel-gaokun3-el2)
-  fi
-
-  dnf -y remove "${cleanup_packages[@]}" || true
-  dnf -y clean all || true
-
-  rm -rf \
-    /usr/src/kernels/"$KREL" \
-    /lib/modules/"$KREL"/build \
-    /lib/modules/"$KREL"/source \
-    /var/cache/dnf \
-    /var/cache/libdnf5
-
-  if [[ "$BUILD_EL2" == "true" && -n "$KREL_EL2" ]]; then
-    rm -rf \
-      /usr/src/kernels/"$KREL_EL2" \
-      /lib/modules/"$KREL_EL2"/build \
-      /lib/modules/"$KREL_EL2"/source
-  fi
-
-  dd if=/dev/zero of=/zero.fill bs=64M status=none || true
-  sync
-  rm -f /zero.fill
-  sync
+MARKER="$HOME/.config/.gaokun3-kde-display-initialized"
+if [[ -e "$MARKER" ]]; then
+  exit 0
 fi
+
+if ! command -v kscreen-doctor >/dev/null 2>&1; then
+  exit 0
+fi
+
+sleep 10
+
+OUTPUT="$(kscreen-doctor -o 2>/dev/null | awk '/Output:/ {print $2}' | grep -m1 '^DSI-1$' || true)"
+if [[ -z "$OUTPUT" ]]; then
+  OUTPUT="$(kscreen-doctor -o 2>/dev/null | awk '/Output:/ {print $2; exit}' || true)"
+fi
+
+if [[ -z "$OUTPUT" ]]; then
+  exit 0
+fi
+
+kscreen-doctor "output.${OUTPUT}.rotation.left" || true
+kscreen-doctor "output.${OUTPUT}.scale.1.5" || true
+
+mkdir -p "$(dirname "$MARKER")"
+touch "$MARKER"
+EOF
+chmod 0755 /usr/local/bin/gaokun3-kde-firstboot-display.sh
+
+cat > /etc/xdg/autostart/gaokun3-kde-firstboot-display.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=Gaokun3 KDE First Boot Display Setup
+Exec=/usr/local/bin/gaokun3-kde-firstboot-display.sh
+OnlyShowIn=KDE;
+X-KDE-autostart-phase=2
+NoDisplay=true
+EOF
 
 mkdir -p /etc/modules-load.d
 echo -e "pci-pwrctrl-pwrseq\nath11k_pci" > /etc/modules-load.d/wifi.conf
 echo "btqca" > /etc/modules-load.d/bluetooth.conf
-echo -e "panel-himax-hx83121a\nhimax-spi\nmsm\nhid_multitouch" > /etc/modules-load.d/display.conf
+echo -e "panel-himax-hx83121a\nhimax_hx83121a_spi\nmsm\nhid_multitouch" > /etc/modules-load.d/display.conf
 echo -e "lpasscc_sc8280xp\nsnd-soc-sc8280xp" > /etc/modules-load.d/audio.conf
 echo -e "huawei-gaokun-ec\nhuawei-gaokun-battery\nucsi_huawei_gaokun" > /etc/modules-load.d/battery.conf
 
@@ -169,7 +162,7 @@ install -d /etc/kernel/install.d
 ln -sf /dev/null /etc/kernel/install.d/51-dracut-rescue.install
 
 cat > /etc/kernel/cmdline <<EOF
-root=UUID=$ROOT_UUID rootflags=subvol=@ clk_ignore_unused pd_ignore_unused arm64.nopauth iommu.passthrough=0 iommu.strict=0 pcie_aspm.policy=powersupersave efi=noruntime fbcon=rotate:1 usbhid.quirks=0x12d1:0x10b8:0x20000000 consoleblank=0 loglevel=4 psi=1
+root=UUID=$ROOT_UUID rootflags=subvol=@ clk_ignore_unused pd_ignore_unused arm64.nopauth iommu.passthrough=0 iommu.strict=0 pcie_aspm.policy=powersupersave efi=noruntime fbcon=rotate:3 usbhid.quirks=0x12d1:0x10b8:0x20000000 consoleblank=0 loglevel=4 psi=1
 EOF
 
 cat > /etc/kernel/devicetree <<'EOF'
