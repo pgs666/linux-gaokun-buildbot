@@ -14,15 +14,15 @@ on:
       desktop_environment:
         description: Desktop environment package group (single package or group)
         required: true
-        default: "@gnome-desktop"
+        default: "@kde-desktop-environment"
       excluded_packages:
         description: Packages to exclude from rootfs install (comma-separated)
         required: true
-        default: "gnome-boxes,gnome-connections,snapshot,gnome-weather,gnome-contacts,gnome-maps,simple-scan,gnome-clocks,gnome-calculator,gnome-calendar"
+        default: ""
       extra_packages:
         description: Extra packages to install (space-separated)
         required: true
-        default: "fcitx5-chinese-addons gnome-tweaks gnome-extensions-app telnet mpv v4l-utils vim nano ripgrep git htop fastfetch screen firefox"
+        default: "fcitx5-chinese-addons telnet mpv v4l-utils vim nano ripgrep git htop fastfetch screen firefox partitionmanager konsole kate dolphin"
       build_el2:
         description: Build and include optional -gaokun3-el2 kernel and EL2 EFI payloads
         required: true
@@ -288,10 +288,6 @@ jobs:
           sudo cp "$GAOKUN_DIR/tools/touchpad/huawei-tp-activate.py" "$ROOTFS_DIR/usr/local/bin/"
           sudo cp "$GAOKUN_DIR/tools/touchpad/huawei-touchpad.service" "$ROOTFS_DIR/etc/systemd/system/"
           sudo chmod +x "$ROOTFS_DIR/usr/local/bin/huawei-tp-activate.py"
-          sudo cp "$GAOKUN_DIR/tools/monitors/gdm-monitor-sync" "$ROOTFS_DIR/usr/local/bin/"
-          sudo cp "$GAOKUN_DIR/tools/monitors/gdm-monitor-sync.service" \
-            "$ROOTFS_DIR/etc/systemd/system/"
-          sudo chmod +x "$ROOTFS_DIR/usr/local/bin/gdm-monitor-sync"
           sudo cp "$GAOKUN_DIR/tools/bluetooth/patch-nvm-bdaddr.py" "$ROOTFS_DIR/usr/local/bin/"
           sudo chmod +x "$ROOTFS_DIR/usr/local/bin/patch-nvm-bdaddr.py"
           sudo cp "$GAOKUN_DIR/tools/audio/sc8280xp.conf" \

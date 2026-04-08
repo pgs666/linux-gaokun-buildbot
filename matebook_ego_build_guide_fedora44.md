@@ -1,7 +1,7 @@
 # Huawei MateBook E Go 2023 Fedora 44 手动构建指南
 
 > **目标机型**：Huawei MateBook E Go 2023 (`SC8280XP` / `gaokun3`)  
-> **目标系统**：Fedora 44 GNOME，systemd-boot 启动，Btrfs 根文件系统  
+> **目标系统**：Fedora 44 KDE Plasma，systemd-boot 启动，Btrfs 根文件系统
 > **推荐宿主机**：Fedora 或其他基于 RPM/DNF 的发行版  
 > **仓库假设**：本文默认你当前仓库位于 `~/gaokun/linux-gaokun-buildbot`
 
@@ -121,7 +121,7 @@ ccache -s
 
 ## 第三步：构建 RootFS
 
-使用 `dnf --installroot` 安装 Fedora 44 GNOME Desktop，并补充启动、网络、输入法和常用工具。
+使用 `dnf --installroot` 安装 Fedora 44 KDE Plasma Desktop，并补充启动、网络、输入法和常用工具。
 
 > 若宿主机是 Ubuntu 等非 Fedora 系统，可先安装 `dnf`，然后继续使用 `--installroot` 方式构建。
 
@@ -135,7 +135,6 @@ export LANGUAGE=zh_CN:zh
 
 # 第一步先安装基础系统、locale 和 langpacks
 sudo dnf --installroot=$ROOTFS_DIR --releasever=44 --forcearch=aarch64 --use-host-config -y \
-    --exclude=gnome-boxes,gnome-connections,snapshot,gnome-weather,gnome-contacts,gnome-maps,simple-scan,gnome-clocks,gnome-calculator,gnome-calendar \
     install \
     @core @standard \
     systemd-boot-unsigned alsa-ucm \
@@ -152,10 +151,9 @@ EOF
 
 # 第二步再安装桌面环境和应用，能更稳定地把中文翻译子包一起拉进 rootfs
 sudo dnf --installroot=$ROOTFS_DIR --releasever=44 --forcearch=aarch64 --use-host-config -y \
-    --exclude=gnome-boxes,gnome-connections,snapshot,gnome-weather,gnome-contacts,gnome-maps,simple-scan,gnome-clocks,gnome-calculator,gnome-calendar \
     install \
-    @gnome-desktop \
-    fcitx5-chinese-addons gnome-tweaks gnome-extensions-app telnet mpv v4l-utils vim nano ripgrep git htop fastfetch screen firefox
+    @kde-desktop-environment \
+    fcitx5-chinese-addons telnet mpv v4l-utils vim nano ripgrep git htop fastfetch screen firefox partitionmanager konsole kate dolphin
 
 # 安装 RPMFusion 并添加 libavcodec-freeworld（硬解视频编码支持）
 sudo dnf --installroot=$ROOTFS_DIR --releasever=44 --forcearch=aarch64 --use-host-config -y \
@@ -225,12 +223,6 @@ sudo cp $GAOKUN_DIR/tools/touchpad/huawei-tp-activate.py \
 sudo cp $GAOKUN_DIR/tools/touchpad/huawei-touchpad.service \
     $ROOTFS_DIR/etc/systemd/system/
 sudo chmod +x $ROOTFS_DIR/usr/local/bin/huawei-tp-activate.py
-
-sudo cp $GAOKUN_DIR/tools/monitors/gdm-monitor-sync \
-    $ROOTFS_DIR/usr/local/bin/
-sudo cp $GAOKUN_DIR/tools/monitors/gdm-monitor-sync.service \
-    $ROOTFS_DIR/etc/systemd/system/
-sudo chmod +x $ROOTFS_DIR/usr/local/bin/gdm-monitor-sync
 
 sudo cp $GAOKUN_DIR/tools/bluetooth/patch-nvm-bdaddr.py \
     $ROOTFS_DIR/usr/local/bin/
@@ -342,6 +334,8 @@ EOF
 cat > /etc/kernel/devicetree <<EOF
 qcom/sc8280xp-huawei-gaokun3.dtb
 EOF
+
+systemctl enable sddm NetworkManager sshd huawei-touchpad.service
 
 dracut --force --kver $KREL
 if [ -n "$KREL_EL2" ]; then
