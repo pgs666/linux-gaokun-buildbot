@@ -4,6 +4,7 @@ set -euo pipefail
 : "${WORKDIR:?missing WORKDIR}"
 : "${ARTIFACT_DIR:?missing ARTIFACT_DIR}"
 : "${IMAGE_FILE:?missing IMAGE_FILE}"
+: "${IMAGE_CHUNK_SIZE:?missing IMAGE_CHUNK_SIZE}"
 : "${FEDORA_RELEASE:?missing FEDORA_RELEASE}"
 : "${KERNEL_TAG:?missing KERNEL_TAG}"
 : "${DESKTOP_ENVIRONMENT:?missing DESKTOP_ENVIRONMENT}"
@@ -19,10 +20,11 @@ if [[ "$BUILD_EL2" == "true" && -f "$WORKDIR/kernel-release-el2.txt" ]]; then
 fi
 IMAGE_BASENAME="$(basename "$IMAGE_FILE")"
 ZST_FILE="$ARTIFACT_DIR/${IMAGE_BASENAME}.zst"
-XZ_FILE="$ARTIFACT_DIR/${IMAGE_BASENAME}.xz"
+SEVENZ_FILE="$ARTIFACT_DIR/${IMAGE_BASENAME}.7z"
 RELEASE_BODY_FILE="$ARTIFACT_DIR/release-body.md"
 EL2_RELEASE_BLOCK=""
 EL2_PAYLOAD_BLOCK=""
+EXTRACTION_BLOCK=""
 if [[ "$BUILD_EL2" == "true" && -n "$EL2_KREL" ]]; then
   EL2_RELEASE_BLOCK="$(cat <<EOF
 - Optional EL2 Kernel Release: \`${EL2_KREL}\`
@@ -40,21 +42,28 @@ cp "$IMAGE_FILE" "$ARTIFACT_DIR/"
 zstd -T0 -19 "$ARTIFACT_DIR/$IMAGE_BASENAME" -o "$ZST_FILE"
 
 PACKAGE_FILE="$ZST_FILE"
+PACKAGE_GLOB="${IMAGE_BASENAME}.zst"
 if [ "$(stat -c '%s' "$ZST_FILE")" -gt "$GITHUB_RELEASE_ASSET_MAX_BYTES" ]; then
   rm -f "$ZST_FILE"
-  xz -T0 -9e -c "$ARTIFACT_DIR/$IMAGE_BASENAME" > "$XZ_FILE"
-  PACKAGE_FILE="$XZ_FILE"
-fi
+  7z a -t7z -mx=9 -m0=lzma2 -v"$IMAGE_CHUNK_SIZE" "$SEVENZ_FILE" "$ARTIFACT_DIR/$IMAGE_BASENAME"
+  PACKAGE_FILE="$SEVENZ_FILE.001"
+  PACKAGE_GLOB="${IMAGE_BASENAME}.7z.0*"
+  EXTRACTION_BLOCK="## Windows Extraction
 
-if [ "$(stat -c '%s' "$PACKAGE_FILE")" -gt "$GITHUB_RELEASE_ASSET_MAX_BYTES" ]; then
-  echo "compressed image exceeds GitHub release asset limit: $(basename "$PACKAGE_FILE")" >&2
-  exit 1
+- Use 7-Zip / WinRAR / Bandizip to open \`${IMAGE_BASENAME}.7z.001\` and extract.
+- Keep all split files in the same directory before extracting.
+
+## Command Line Extraction
+
+\`\`\`bash
+7z x ${IMAGE_BASENAME}.7z.001
+\`\`\`
+"
 fi
 
 rm -f "$ARTIFACT_DIR/$IMAGE_BASENAME"
 
 COMPRESSED_BASENAME="$(basename "$PACKAGE_FILE")"
-PACKAGE_GLOB="$COMPRESSED_BASENAME"
 cat > "$RELEASE_BODY_FILE" <<EOF
 ## Build Information
 
@@ -80,6 +89,8 @@ ${EL2_RELEASE_BLOCK}
 - Username: \`user\`
 - Password: \`user\`
 ${EL2_PAYLOAD_BLOCK}
+
+${EXTRACTION_BLOCK}
 EOF
 
 sudo chown "$(id -u):$(id -g)" "$RELEASE_BODY_FILE"
