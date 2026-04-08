@@ -10,7 +10,7 @@ set -euo pipefail
 : "${FEDORA_RELEASE:?missing FEDORA_RELEASE}"
 
 BUILD_EL2="${BUILD_EL2:-false}"
-DISPLAY_MANAGER="sddm"
+DISPLAY_MANAGER="plasmalogin"
 KREL="$(cat "$WORKDIR/kernel-release.txt")"
 KREL_EL2=""
 if [[ "$BUILD_EL2" == "true" && -f "$WORKDIR/kernel-release-el2.txt" ]]; then
@@ -95,16 +95,6 @@ Language=zh_CN.UTF-8
 EOF
 systemctl enable "$DISPLAY_MANAGER" NetworkManager sshd huawei-touchpad.service || true
 
-install -d -m 0755 /etc/sddm.conf.d
-cat > /etc/sddm.conf.d/10-gaokun3-wayland.conf <<'EOF'
-[General]
-DisplayServer=wayland
-GreeterEnvironment=QT_WAYLAND_SHELL_INTEGRATION=layer-shell
-
-[Wayland]
-CompositorCommand=kwin_wayland --drm --no-lockscreen --no-global-shortcuts --locale1 --inputmethod plasma-keyboard
-EOF
-
 install -d -m 0755 -o user -g user /home/user/.config
 cat > /home/user/.config/kwinoutputconfig.json <<'EOF'
 [
@@ -112,7 +102,13 @@ cat > /home/user/.config/kwinoutputconfig.json <<'EOF'
     "name": "outputs",
     "data": [
       {
+        "autoRotation": "InTabletMode",
         "connectorName": "DSI-1",
+        "mode": {
+          "height": 2560,
+          "refreshRate": 120000,
+          "width": 1600
+        },
         "scale": 1.5,
         "transform": "Rotated270"
       }
@@ -142,9 +138,20 @@ cat > /home/user/.config/kwinoutputconfig.json <<'EOF'
 EOF
 chown user:user /home/user/.config/kwinoutputconfig.json
 
-install -d -m 0700 -o sddm -g sddm /var/lib/sddm/.config
-install -m 0600 -o sddm -g sddm /home/user/.config/kwinoutputconfig.json \
-  /var/lib/sddm/.config/kwinoutputconfig.json
+cat > /home/user/.config/kcminputrc <<'EOF'
+[Mouse]
+cursorTheme=breeze_cursors
+EOF
+chown user:user /home/user/.config/kcminputrc
+
+install -d -m 0700 -o plasmalogin -g plasmalogin /var/lib/plasmalogin/.config
+install -d -m 0755 -o plasmalogin -g plasmalogin /var/lib/plasmalogin/.config/kdedefaults
+install -m 0600 -o plasmalogin -g plasmalogin /home/user/.config/kwinoutputconfig.json \
+  /var/lib/plasmalogin/.config/kwinoutputconfig.json
+install -m 0600 -o plasmalogin -g plasmalogin /home/user/.config/kcminputrc \
+  /var/lib/plasmalogin/.config/kcminputrc
+install -m 0644 -o plasmalogin -g plasmalogin /home/user/.config/kcminputrc \
+  /var/lib/plasmalogin/.config/kdedefaults/kcminputrc
 
 mkdir -p /etc/modules-load.d
 echo -e "pci-pwrctrl-pwrseq\nath11k_pci" > /etc/modules-load.d/wifi.conf
