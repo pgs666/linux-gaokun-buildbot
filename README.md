@@ -24,6 +24,23 @@ The package pipeline builds and installs dedicated package sets:
 - Ubuntu kernel image packages run `update-initramfs` during install/upgrade, which in turn refreshes the BLS entry through the distro `systemd-boot` hook.
 - Fedora kernel RPMs now ship a matching `dracut.conf.d` snippet and run `dracut` + `kernel-install add` in `%posttrans`, so installing or upgrading the package refreshes the initramfs and BLS entry automatically.
 
+## Touchscreen driver
+
+The HX83121A touchscreen support is carried here as an in-tree kernel patch and packaged together with the gaokun3 kernel. It is no longer expected to be installed later through a separate DKMS step on the target system.
+
+The current in-tree version is based on [`chiyuki0325/EGoTouchRev-Linux`](https://github.com/chiyuki0325/EGoTouchRev-Linux) and keeps the driver split in the local mirror as:
+
+- `drivers/touchscreen-hx83121a/himax_hx83121a_spi_core.c`
+- `drivers/touchscreen-hx83121a/himax_hx83121a_spi_algo.c`
+- `drivers/touchscreen-hx83121a/himax_hx83121a_spi_algo.h`
+
+Notable behavior of the packaged driver:
+
+- the built module name stays `himax_hx83121a_spi`, so the existing image scripts still autoload it
+- the `EGoTouchRev-Linux` algorithm parameters are exposed through the device `algo` sysfs group under `/sys/bus/spi/devices/.../algo/`
+- `disable_pressure=1` remains the default module parameter, so `ABS_MT_TOUCH_MAJOR` and `ABS_MT_PRESSURE` stay off unless you explicitly override it through modprobe configuration
+- the GUI tuner from the upstream repo is not bundled here; this repository only carries the kernel-side driver integration
+
 ## Boot artifact layout
 
 The image and local-install workflows now follow the standard `kernel-install` + BLS flow instead of hand-writing `systemd-boot` entries.
@@ -48,10 +65,11 @@ The image and local-install workflows now follow the standard `kernel-install` +
 
 - [right-0903/linux-gaokun](https://github.com/right-0903/linux-gaokun) : The main source of the kernel patches and device support work, with detailed commit messages and explanations.
 - [TheUnknownThing/linux-gaokun](https://github.com/TheUnknownThing/linux-gaokun) : Another fork of the kernel patches and device support work, with some unique commits and explanations for Touchscreen and EC.
+- [chiyuki0325/EGoTouchRev-Linux](https://github.com/chiyuki0325/EGoTouchRev-Linux) : The current source used to internalize the HX83121A touchscreen algorithm and runtime tuning sysfs into the in-tree kernel patch.
 - [whitelewi1-ctrl/matebook-e-go-linux](https://github.com/whitelewi1-ctrl/matebook-e-go-linux) : The earliest repo to fix panel backlight problem, with some additional resources and modifications for Gaokun3 Linux support.
 - [gaokun on AUR](https://aur.archlinux.org/packages?O=0&K=gaokun) : Several AUR packages built for Gaokun3, including kernel and firmware packages.
 - [chenxuecong2/firmware-huawei-gaokun3](https://github.com/chenxuecong2/firmware-huawei-gaokun3) : A firmware bundle repository for Gaokun3.
-- [awarson2233/EGoTouchRev-rebuild](https://github.com/awarson2233/EGoTouchRev-rebuild) : A repository focused on the touchscreen firmware and driver support for Gaokun3 on Windows.
+- [awarson2233/EGoTouchRev-rebuild](https://github.com/awarson2233/EGoTouchRev-rebuild) : The Windows-side touchscreen project that the newer Linux algorithm work references for CMF, IIR, zone detection, palm rejection, centroid, and tracking ideas.
 - [TravMurav/slbounce](https://github.com/TravMurav/slbounce) : A UEFI application that enables EL2 support and Secure Launch on Gaokun3.
 - [TravMurav/linux](https://github.com/TravMurav/linux/tree/x13s-6.18-v1.1-cxsd) : A Linux kernel tree with some useful patches for EL2 support on sc8280xp platforms.
 - [stephan-gh/qebspil](https://github.com/stephan-gh/qebspil) : A UEFI application that pre-launches the DSP firmware on Qualcomm platforms, which can be used in the boot chain before launching Linux.
