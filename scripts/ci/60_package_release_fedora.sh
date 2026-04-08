@@ -13,11 +13,13 @@ set -euo pipefail
 KREL="$(cat "$WORKDIR/kernel-release.txt")"
 BUILD_EL2="${BUILD_EL2:-false}"
 EL2_KREL=""
+GITHUB_RELEASE_ASSET_MAX_BYTES=$((2 * 1024 * 1024 * 1024 - 1))
 if [[ "$BUILD_EL2" == "true" && -f "$WORKDIR/kernel-release-el2.txt" ]]; then
   EL2_KREL="$(cat "$WORKDIR/kernel-release-el2.txt")"
 fi
 IMAGE_BASENAME="$(basename "$IMAGE_FILE")"
 ZST_FILE="$ARTIFACT_DIR/${IMAGE_BASENAME}.zst"
+XZ_FILE="$ARTIFACT_DIR/${IMAGE_BASENAME}.xz"
 RELEASE_BODY_FILE="$ARTIFACT_DIR/release-body.md"
 EL2_RELEASE_BLOCK=""
 EL2_PAYLOAD_BLOCK=""
@@ -37,7 +39,22 @@ fi
 cp "$IMAGE_FILE" "$ARTIFACT_DIR/"
 zstd -T0 -19 "$ARTIFACT_DIR/$IMAGE_BASENAME" -o "$ZST_FILE"
 
-PACKAGE_GLOB="${IMAGE_BASENAME}.zst"
+PACKAGE_FILE="$ZST_FILE"
+if [ "$(stat -c '%s' "$ZST_FILE")" -gt "$GITHUB_RELEASE_ASSET_MAX_BYTES" ]; then
+  rm -f "$ZST_FILE"
+  xz -T0 -9e -c "$ARTIFACT_DIR/$IMAGE_BASENAME" > "$XZ_FILE"
+  PACKAGE_FILE="$XZ_FILE"
+fi
+
+if [ "$(stat -c '%s' "$PACKAGE_FILE")" -gt "$GITHUB_RELEASE_ASSET_MAX_BYTES" ]; then
+  echo "compressed image exceeds GitHub release asset limit: $(basename "$PACKAGE_FILE")" >&2
+  exit 1
+fi
+
+rm -f "$ARTIFACT_DIR/$IMAGE_BASENAME"
+
+COMPRESSED_BASENAME="$(basename "$PACKAGE_FILE")"
+PACKAGE_GLOB="$COMPRESSED_BASENAME"
 cat > "$RELEASE_BODY_FILE" <<EOF
 ## Build Information
 
@@ -49,7 +66,7 @@ ${EL2_RELEASE_BLOCK}
 - Root Filesystem: \`Btrfs (@, @home, @var)\`
 - Bootloader: \`systemd-boot\`
 - Image File: \`${IMAGE_BASENAME}\`
-- Compressed File: \`${IMAGE_BASENAME}.zst\`
+- Compressed File: \`${COMPRESSED_BASENAME}\`
 - Build Time (UTC): \`$(date -u +"%Y-%m-%dT%H:%M:%SZ")\`
 
 ## Rootfs Selection

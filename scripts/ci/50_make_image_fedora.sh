@@ -138,6 +138,11 @@ if [[ -d /usr/src/himax-spi-0.0 ]]; then
       /lib/modules/"$KREL_EL2"/build \
       /lib/modules/"$KREL_EL2"/source
   fi
+
+  dd if=/dev/zero of=/zero.fill bs=64M status=none || true
+  sync
+  rm -f /zero.fill
+  sync
 fi
 
 mkdir -p /etc/modules-load.d
