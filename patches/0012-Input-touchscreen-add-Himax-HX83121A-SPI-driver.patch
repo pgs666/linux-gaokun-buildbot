@@ -1,7 +1,7 @@
-From 0f046b36d37bbb70d84d490d643fd25d46e1f5d2 Mon Sep 17 00:00:00 2001
+From da31e933d36129f30a0e9ce814f9e4deab0aa294 Mon Sep 17 00:00:00 2001
 From: local-build <local-build@localhost>
-Date: Wed, 8 Apr 2026 22:07:03 +0800
-Subject: [PATCH 12/16] Input: touchscreen: add Himax HX83121A SPI driver
+Date: Wed, 8 Apr 2026 22:16:58 +0800
+Subject: [PATCH] Input: touchscreen: add Himax HX83121A SPI driver
 
 Import the current in-tree HX83121A touchscreen driver split into SPI core and EGoTouchRev-derived algorithm files.
 ---
@@ -16,10 +16,10 @@ Import the current in-tree HX83121A touchscreen driver split into SPI core and E
  create mode 100644 drivers/input/touchscreen/himax_hx83121a_spi_core.c
 
 diff --git a/drivers/input/touchscreen/Kconfig b/drivers/input/touchscreen/Kconfig
-index db922ac..ecee88e 100644
+index 7d5b72ee0..770f5f4e4 100644
 --- a/drivers/input/touchscreen/Kconfig
 +++ b/drivers/input/touchscreen/Kconfig
-@@ -1,4 +1,16 @@
+@@ -1424,4 +1424,16 @@ config TOUCHSCREEN_HIMAX_HX83112B
  	  To compile this driver as a module, choose M here: the
  	  module will be called himax_hx83112b.
  
@@ -37,17 +37,18 @@ index db922ac..ecee88e 100644
 +
  endif
 diff --git a/drivers/input/touchscreen/Makefile b/drivers/input/touchscreen/Makefile
-index e683e5c..ebf0877 100644
+index ab9abd151..abcaf0b44 100644
 --- a/drivers/input/touchscreen/Makefile
 +++ b/drivers/input/touchscreen/Makefile
-@@ -1,2 +1,4 @@
+@@ -120,3 +120,5 @@ obj-$(CONFIG_TOUCHSCREEN_IQS5XX)	+= iqs5xx.o
+ obj-$(CONFIG_TOUCHSCREEN_IQS7211)	+= iqs7211.o
  obj-$(CONFIG_TOUCHSCREEN_ZINITIX)	+= zinitix.o
  obj-$(CONFIG_TOUCHSCREEN_HIMAX_HX83112B)	+= himax_hx83112b.o
 +obj-$(CONFIG_TOUCHSCREEN_HIMAX_HX83121A_SPI)	+= himax_hx83121a_spi.o
 +himax_hx83121a_spi-y	:= himax_hx83121a_spi_core.o himax_hx83121a_spi_algo.o
 diff --git a/drivers/input/touchscreen/himax_hx83121a_spi_algo.c b/drivers/input/touchscreen/himax_hx83121a_spi_algo.c
 new file mode 100644
-index 0000000..f3b7095
+index 000000000..f3b709505
 --- /dev/null
 +++ b/drivers/input/touchscreen/himax_hx83121a_spi_algo.c
 @@ -0,0 +1,1134 @@
@@ -1187,7 +1188,7 @@ index 0000000..f3b7095
 +}
 diff --git a/drivers/input/touchscreen/himax_hx83121a_spi_algo.h b/drivers/input/touchscreen/himax_hx83121a_spi_algo.h
 new file mode 100644
-index 0000000..d032479
+index 000000000..d032479fc
 --- /dev/null
 +++ b/drivers/input/touchscreen/himax_hx83121a_spi_algo.h
 @@ -0,0 +1,191 @@
@@ -1384,7 +1385,7 @@ index 0000000..d032479
 +#endif /* HIMAX_HX83121A_SPI_ALGO_H */
 diff --git a/drivers/input/touchscreen/himax_hx83121a_spi_core.c b/drivers/input/touchscreen/himax_hx83121a_spi_core.c
 new file mode 100644
-index 0000000..385527e
+index 000000000..385527e66
 --- /dev/null
 +++ b/drivers/input/touchscreen/himax_hx83121a_spi_core.c
 @@ -0,0 +1,1478 @@
@@ -2868,3 +2869,4 @@ index 0000000..385527e
 +MODULE_DESCRIPTION("Himax HX83121A SPI touchscreen driver");
 -- 
 2.53.0
+
