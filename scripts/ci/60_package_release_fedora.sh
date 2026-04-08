@@ -8,7 +8,7 @@ set -euo pipefail
 : "${FEDORA_RELEASE:?missing FEDORA_RELEASE}"
 : "${KERNEL_TAG:?missing KERNEL_TAG}"
 : "${DESKTOP_ENVIRONMENT:?missing DESKTOP_ENVIRONMENT}"
-: "${EXCLUDED_PACKAGES:?missing EXCLUDED_PACKAGES}"
+: "${EXCLUDED_PACKAGES:=}"
 : "${EXTRA_PACKAGES:?missing EXTRA_PACKAGES}"
 
 KREL="$(cat "$WORKDIR/kernel-release.txt")"
