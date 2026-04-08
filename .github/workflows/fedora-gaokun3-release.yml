@@ -276,6 +276,13 @@ jobs:
             --user root \
             "fedora:${FEDORA_RELEASE}" \
             bash -euxo pipefail -c '
+              stock_firmware_packages=()
+              rpm --root="'"$ROOTFS_DIR"'" -q atheros-firmware >/dev/null 2>&1 && stock_firmware_packages+=(atheros-firmware)
+              rpm --root="'"$ROOTFS_DIR"'" -q qcom-firmware >/dev/null 2>&1 && stock_firmware_packages+=(qcom-firmware)
+              if (( ${#stock_firmware_packages[@]} )); then
+                rpm --root="'"$ROOTFS_DIR"'" -e --nodeps "${stock_firmware_packages[@]}"
+              fi
+
               dnf -y --installroot="'"$ROOTFS_DIR"'" --releasever="'"$FEDORA_RELEASE"'" --use-host-config --nogpgcheck \
                 install --allowerasing \
                 '"$rpm_install_args_string"'
