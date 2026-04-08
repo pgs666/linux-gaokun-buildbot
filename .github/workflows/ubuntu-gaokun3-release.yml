@@ -255,6 +255,7 @@ jobs:
 
             apt-get install -y \
               '"$DESKTOP_ENVIRONMENT"' \
+              python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 xdg-utils policykit-1 \
               fonts-noto-cjk fonts-noto-color-emoji \
               gstreamer1.0-libav gstreamer1.0-plugins-ugly \
               alsa-utils pipewire-alsa \

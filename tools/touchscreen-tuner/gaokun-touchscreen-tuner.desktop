@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=EGoTouch Tuner
+Name[zh_CN]=EGoTouch 触屏调参
+Comment=Tune Himax HX83121A touchscreen parameters
+Comment[zh_CN]=调整 Himax HX83121A 触屏算法参数
+Exec=/usr/local/bin/gaokun-touchscreen-tuner
+Icon=preferences-desktop-touchscreen
+Terminal=false
+Categories=GTK;Utility;
+Keywords=touchscreen;touch;himax;EGoTouch;gaokun3;
+StartupNotify=true

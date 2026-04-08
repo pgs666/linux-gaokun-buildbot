@@ -208,6 +208,7 @@ jobs:
                 install \
                 @core @standard "'"$DESKTOP_ENVIRONMENT"'" \
                 systemd-boot-unsigned alsa-ucm \
+                python3-gobject gtk4 libadwaita xdg-utils polkit \
                 langpacks-en langpacks-zh_CN \
                 google-noto-color-emoji-fonts google-noto-emoji-fonts \
                 alsa-utils pipewire-utils \

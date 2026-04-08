@@ -39,7 +39,7 @@ Notable behavior of the packaged driver:
 - the built module name stays `himax_hx83121a_spi`, so the existing image scripts still autoload it
 - the `EGoTouchRev-Linux` algorithm parameters are exposed through the device `algo` sysfs group under `/sys/bus/spi/devices/.../algo/`
 - `disable_pressure=1` remains the default module parameter, so `ABS_MT_TOUCH_MAJOR` and `ABS_MT_PRESSURE` stay off unless you explicitly override it through modprobe configuration
-- the GUI tuner from the upstream repo is not bundled here; this repository only carries the kernel-side driver integration
+- the GTK4/libadwaita touchscreen tuner is bundled in built images as `EGoTouch Tuner`, with the launcher installed under the desktop utility menu and the script payload stored in `tools/touchscreen-tuner/`
 
 ## Boot artifact layout
 

@@ -267,6 +267,13 @@ editor no
 EOF
 CHROOT_EOF
 
+sudo install -Dm0755 "$GAOKUN_DIR/tools/touchscreen-tuner/gaokun-touchscreen-tuner" \
+  "$MNT/usr/local/bin/gaokun-touchscreen-tuner"
+sudo install -Dm0644 "$GAOKUN_DIR/tools/touchscreen-tuner/tune.py" \
+  "$MNT/usr/local/share/gaokun-touchscreen-tuner/tune.py"
+sudo install -Dm0644 "$GAOKUN_DIR/tools/touchscreen-tuner/gaokun-touchscreen-tuner.desktop" \
+  "$MNT/usr/local/share/applications/gaokun-touchscreen-tuner.desktop"
+
 if [[ "$BUILD_EL2" == "true" && -n "$KREL_EL2" ]]; then
   sudo mkdir -p "$MNT/boot/efi/EFI/systemd/drivers" "$MNT/boot/efi/firmware"
   sudo install -Dm644 "$GAOKUN_DIR/tools/el2/slbounceaa64.efi" \
