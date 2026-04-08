@@ -17,7 +17,7 @@ on:
         default: "@kde-desktop-environment"
       excluded_packages:
         description: Packages to exclude from rootfs install (comma-separated)
-        required: true
+        required: false
         default: ""
       extra_packages:
         description: Extra packages to install (space-separated)
