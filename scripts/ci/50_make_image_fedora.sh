@@ -95,48 +95,56 @@ Language=zh_CN.UTF-8
 EOF
 systemctl enable "$DISPLAY_MANAGER" NetworkManager sshd huawei-touchpad.service || true
 
-install -d -m 0755 /usr/local/bin /etc/xdg/autostart
-cat > /usr/local/bin/gaokun3-kde-firstboot-display.sh <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
+install -d -m 0755 /etc/sddm.conf.d
+cat > /etc/sddm.conf.d/10-gaokun3-wayland.conf <<'EOF'
+[General]
+DisplayServer=wayland
+GreeterEnvironment=QT_WAYLAND_SHELL_INTEGRATION=layer-shell
 
-MARKER="$HOME/.config/.gaokun3-kde-display-initialized"
-if [[ -e "$MARKER" ]]; then
-  exit 0
-fi
-
-if ! command -v kscreen-doctor >/dev/null 2>&1; then
-  exit 0
-fi
-
-sleep 10
-
-OUTPUT="$(kscreen-doctor -o 2>/dev/null | awk '/Output:/ {print $2}' | grep -m1 '^DSI-1$' || true)"
-if [[ -z "$OUTPUT" ]]; then
-  OUTPUT="$(kscreen-doctor -o 2>/dev/null | awk '/Output:/ {print $2; exit}' || true)"
-fi
-
-if [[ -z "$OUTPUT" ]]; then
-  exit 0
-fi
-
-kscreen-doctor "output.${OUTPUT}.rotation.left" || true
-kscreen-doctor "output.${OUTPUT}.scale.1.5" || true
-
-mkdir -p "$(dirname "$MARKER")"
-touch "$MARKER"
+[Wayland]
+CompositorCommand=kwin_wayland --drm --no-lockscreen --no-global-shortcuts --locale1 --inputmethod plasma-keyboard
 EOF
-chmod 0755 /usr/local/bin/gaokun3-kde-firstboot-display.sh
 
-cat > /etc/xdg/autostart/gaokun3-kde-firstboot-display.desktop <<'EOF'
-[Desktop Entry]
-Type=Application
-Name=Gaokun3 KDE First Boot Display Setup
-Exec=/usr/local/bin/gaokun3-kde-firstboot-display.sh
-OnlyShowIn=KDE;
-X-KDE-autostart-phase=2
-NoDisplay=true
+install -d -m 0755 -o user -g user /home/user/.config
+cat > /home/user/.config/kwinoutputconfig.json <<'EOF'
+[
+  {
+    "name": "outputs",
+    "data": [
+      {
+        "connectorName": "DSI-1",
+        "scale": 1.5,
+        "transform": "Rotated270"
+      }
+    ]
+  },
+  {
+    "name": "setups",
+    "data": [
+      {
+        "lidClosed": false,
+        "outputs": [
+          {
+            "enabled": true,
+            "outputIndex": 0,
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "priority": 1,
+            "replicationSource": ""
+          }
+        ]
+      }
+    ]
+  }
+]
 EOF
+chown user:user /home/user/.config/kwinoutputconfig.json
+
+install -d -m 0700 -o sddm -g sddm /var/lib/sddm/.config
+install -m 0600 -o sddm -g sddm /home/user/.config/kwinoutputconfig.json \
+  /var/lib/sddm/.config/kwinoutputconfig.json
 
 mkdir -p /etc/modules-load.d
 echo -e "pci-pwrctrl-pwrseq\nath11k_pci" > /etc/modules-load.d/wifi.conf
