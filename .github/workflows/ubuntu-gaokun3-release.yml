@@ -253,9 +253,14 @@ jobs:
 
             apt-get update
 
+            polkit_packages="policykit-1"
+            if dpkg --compare-versions "${UBUNTU_RELEASE}" gt "25.10"; then
+                polkit_packages="polkitd pkexec"
+            fi
+
             apt-get install -y \
               '"$DESKTOP_ENVIRONMENT"' \
-              python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 xdg-utils policykit-1 \
+              python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 xdg-utils $polkit_packages \
               fonts-noto-cjk fonts-noto-color-emoji \
               gstreamer1.0-libav gstreamer1.0-plugins-ugly \
               alsa-utils pipewire-alsa \
