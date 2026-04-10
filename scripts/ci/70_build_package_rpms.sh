@@ -80,6 +80,9 @@ build_variant_rpms() {
   local kernel_tar="${kernel_pkg}.tar.gz"
   local modules_tar="${modules_pkg}.tar.gz"
   local devel_tar="${devel_pkg}.tar.gz"
+  local extra_cmdline=""
+  local has_el2_payload=0
+  local el2_payload_root="/usr/lib/gaokun3/el2/$krel"
 
   rm -rf "$kernel_stage" "$modules_stage" "$modules_raw_stage" "$devel_stage"
   mkdir -p "$kernel_stage/boot/dtb-$krel/qcom" "$kernel_stage/usr/lib/dracut/dracut.conf.d" \
@@ -94,6 +97,22 @@ build_variant_rpms() {
     "$kernel_stage/boot/config-$krel"
   install -Dm644 "$out_dir/arch/arm64/boot/dts/qcom/$dtb_name" \
     "$kernel_stage/boot/dtb-$krel/qcom/$dtb_name"
+  if [[ "$variant_key" == "el2" ]]; then
+    extra_cmdline="modprobe.blacklist=simpledrm"
+    has_el2_payload=1
+    install -Dm644 "$GAOKUN_DIR/tools/el2/slbounceaa64.efi" \
+      "$kernel_stage${el2_payload_root}/EFI/systemd/drivers/slbounceaa64.efi"
+    install -Dm644 "$GAOKUN_DIR/tools/el2/qebspilaa64.efi" \
+      "$kernel_stage${el2_payload_root}/EFI/systemd/drivers/qebspilaa64.efi"
+    install -Dm644 "$GAOKUN_DIR/tools/el2/tcblaunch.exe" \
+      "$kernel_stage${el2_payload_root}/tcblaunch.exe"
+    install -Dm644 "$GAOKUN_DIR/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcadsp8280.mbn" \
+      "$kernel_stage${el2_payload_root}/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcadsp8280.mbn"
+    install -Dm644 "$GAOKUN_DIR/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qccdsp8280.mbn" \
+      "$kernel_stage${el2_payload_root}/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qccdsp8280.mbn"
+    install -Dm644 "$GAOKUN_DIR/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcslpi8280.mbn" \
+      "$kernel_stage${el2_payload_root}/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcslpi8280.mbn"
+  fi
   cat > "$kernel_stage/usr/lib/dracut/dracut.conf.d/$dracut_conf" <<'EOF'
 hostonly="no"
 add_drivers+=" btrfs nvme phy-qcom-qmp-pcie phy-qcom-qmp-combo phy-qcom-qmp-usb phy-qcom-snps-femto-v2 usb-storage uas typec pci-pwrctrl-pwrseq ath11k ath11k_pci i2c-hid-of lpasscc_sc8280xp snd-soc-sc8280xp pinctrl_sc8280xp_lpass_lpi "
@@ -132,7 +151,10 @@ EOF
     "@SOURCE_NAME@" "$kernel_tar" \
     "@KREL_VERSION@" "$krel_version" \
     "@KREL@" "$krel" \
-    "@DTB_FILE@" "$dtb_name"
+    "@DTB_FILE@" "$dtb_name" \
+    "@EXTRA_CMDLINE@" "$extra_cmdline" \
+    "@HAS_EL2_PAYLOAD@" "$has_el2_payload" \
+    "@EL2_PAYLOAD_ROOT@" "$el2_payload_root"
 
   render_spec_template \
     "$GAOKUN_DIR/packaging/kernel-modules-gaokun3.spec.in" \
@@ -230,7 +252,7 @@ if [[ "$BUILD_EL2" == "true" ]]; then
   EL2_MANIFEST_BLOCK="$(cat <<EOF
 ,
     "el2": {
-      "release": "${KREL_EL2}",
+      "release": "${EL2_KREL}",
       "packages": {
         "kernel": "${KERNEL_RPM_EL2}",
         "kernel_modules": "${MODULES_RPM_EL2}",

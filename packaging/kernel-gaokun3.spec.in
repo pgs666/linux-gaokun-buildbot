@@ -10,6 +10,7 @@ BuildArch:      aarch64
 Source0:        @SOURCE_NAME@
 Requires(posttrans): dracut
 Requires(posttrans): systemd
+Requires(posttrans): util-linux
 Requires(preun): systemd
 
 %description
@@ -40,6 +41,17 @@ if [ "$1" -ge 1 ] && command -v dracut >/dev/null 2>&1 && command -v kernel-inst
         cmdline="$(tr ' ' '\n' </proc/cmdline | grep -ve '^BOOT_IMAGE=' -e '^initrd=' | tr '\n' ' ')"
     fi
     cmdline="${cmdline%" "}"
+    extra_cmdline='@EXTRA_CMDLINE@'
+    case " $cmdline " in
+        *" $extra_cmdline "*)
+            ;;
+        *)
+            if [ -n "$extra_cmdline" ]; then
+                cmdline="${cmdline} $extra_cmdline"
+                cmdline="${cmdline#" "}"
+            fi
+            ;;
+    esac
 
     printf 'layout=bls\n' > "$temp_conf_root/install.conf"
     printf '%s\n' "$cmdline" > "$temp_conf_root/cmdline"
@@ -57,6 +69,34 @@ if [ "$1" -ge 1 ] && command -v dracut >/dev/null 2>&1 && command -v kernel-inst
     KERNEL_INSTALL_CONF_ROOT="$temp_conf_root" \
         kernel-install --make-entry-directory=yes --entry-token=machine-id add \
         @KREL@ /boot/vmlinuz-@KREL@ >/dev/null 2>&1 || :
+
+    if [ @HAS_EL2_PAYLOAD@ -eq 1 ] && [ -d "@EL2_PAYLOAD_ROOT@" ]; then
+        esp_path=""
+        if command -v bootctl >/dev/null 2>&1; then
+            esp_path="$(bootctl --print-esp-path 2>/dev/null || true)"
+        fi
+        if [ -z "$esp_path" ] && findmnt -rn --target /boot/efi >/dev/null 2>&1; then
+            esp_path="/boot/efi"
+        fi
+        if [ -n "$esp_path" ] && findmnt -rn --target "$esp_path" >/dev/null 2>&1; then
+            install -d "$esp_path/EFI/systemd/drivers" \
+                       "$esp_path/firmware/qcom/sc8280xp/HUAWEI/gaokun3"
+            install -m 0644 "@EL2_PAYLOAD_ROOT@/EFI/systemd/drivers/slbounceaa64.efi" \
+                "$esp_path/EFI/systemd/drivers/slbounceaa64.efi"
+            install -m 0644 "@EL2_PAYLOAD_ROOT@/EFI/systemd/drivers/qebspilaa64.efi" \
+                "$esp_path/EFI/systemd/drivers/qebspilaa64.efi"
+            install -m 0644 "@EL2_PAYLOAD_ROOT@/tcblaunch.exe" \
+                "$esp_path/tcblaunch.exe"
+            install -m 0644 "@EL2_PAYLOAD_ROOT@/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcadsp8280.mbn" \
+                "$esp_path/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcadsp8280.mbn"
+            install -m 0644 "@EL2_PAYLOAD_ROOT@/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qccdsp8280.mbn" \
+                "$esp_path/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qccdsp8280.mbn"
+            install -m 0644 "@EL2_PAYLOAD_ROOT@/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcslpi8280.mbn" \
+                "$esp_path/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcslpi8280.mbn"
+        else
+            echo "warning: EL2 payload install skipped because the ESP is not mounted" >&2
+        fi
+    fi
 fi
 
 %preun
@@ -70,6 +110,14 @@ fi
 /boot/config-@KREL@
 /boot/dtb-@KREL@/qcom/@DTB_FILE@
 /usr/lib/dracut/dracut.conf.d/90-gaokun3-@KREL@.conf
+%if @HAS_EL2_PAYLOAD@
+/usr/lib/gaokun3/el2/@KREL@/EFI/systemd/drivers/slbounceaa64.efi
+/usr/lib/gaokun3/el2/@KREL@/EFI/systemd/drivers/qebspilaa64.efi
+/usr/lib/gaokun3/el2/@KREL@/tcblaunch.exe
+/usr/lib/gaokun3/el2/@KREL@/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcadsp8280.mbn
+/usr/lib/gaokun3/el2/@KREL@/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qccdsp8280.mbn
+/usr/lib/gaokun3/el2/@KREL@/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcslpi8280.mbn
+%endif
 
 %changelog
 * Sat Mar 28 2026 cool <bilibili@att.net> - @KREL_VERSION@-1

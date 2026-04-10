@@ -13,7 +13,11 @@ BUILD_EL2="${BUILD_EL2:-false}"
 DISPLAY_MANAGER="plasmalogin"
 KREL="$(cat "$WORKDIR/kernel-release.txt")"
 KREL_EL2=""
-if [[ "$BUILD_EL2" == "true" && -f "$WORKDIR/kernel-release-el2.txt" ]]; then
+if [[ "$BUILD_EL2" == "true" ]]; then
+  if [[ ! -f "$WORKDIR/kernel-release-el2.txt" ]]; then
+    echo "BUILD_EL2=true but $WORKDIR/kernel-release-el2.txt is missing" >&2
+    exit 1
+  fi
   KREL_EL2="$(cat "$WORKDIR/kernel-release-el2.txt")"
 fi
 

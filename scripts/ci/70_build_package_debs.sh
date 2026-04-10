@@ -84,6 +84,9 @@ build_kernel_variant() {
   local headers_stage="$BUILDROOT_DIR/${headers_pkg}"
   local headers_tree="$headers_stage/usr/src/linux-headers-$krel"
   local postinst_script
+  local extra_cmdline=""
+  local payload_root=""
+  local image_depends="linux-firmware-gaokun3, initramfs-tools, systemd, util-linux"
 
   rm -rf "$image_stage" "$modules_stage" "$modules_raw_stage" "$headers_stage"
   mkdir -p "$image_stage/boot" "$image_stage/usr/lib/linux-image-$krel/qcom"
@@ -99,6 +102,22 @@ build_kernel_variant() {
     "$image_stage/boot/dtb-$krel"
   install -Dm644 "$out_dir/arch/arm64/boot/dts/qcom/$dtb_name" \
     "$image_stage/usr/lib/linux-image-$krel/qcom/$dtb_name"
+  if [[ "$variant_key" == "el2" ]]; then
+    extra_cmdline="modprobe.blacklist=simpledrm"
+    payload_root="/usr/lib/gaokun3/el2/$krel"
+    install -Dm644 "$GAOKUN_DIR/tools/el2/slbounceaa64.efi" \
+      "$image_stage${payload_root}/EFI/systemd/drivers/slbounceaa64.efi"
+    install -Dm644 "$GAOKUN_DIR/tools/el2/qebspilaa64.efi" \
+      "$image_stage${payload_root}/EFI/systemd/drivers/qebspilaa64.efi"
+    install -Dm644 "$GAOKUN_DIR/tools/el2/tcblaunch.exe" \
+      "$image_stage${payload_root}/tcblaunch.exe"
+    install -Dm644 "$GAOKUN_DIR/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcadsp8280.mbn" \
+      "$image_stage${payload_root}/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcadsp8280.mbn"
+    install -Dm644 "$GAOKUN_DIR/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qccdsp8280.mbn" \
+      "$image_stage${payload_root}/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qccdsp8280.mbn"
+    install -Dm644 "$GAOKUN_DIR/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcslpi8280.mbn" \
+      "$image_stage${payload_root}/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcslpi8280.mbn"
+  fi
 
   make -C "$src_dir" O="$out_dir" ARCH=arm64 INSTALL_MOD_PATH="$modules_raw_stage" modules_install
   mv "$modules_raw_stage/lib/modules" "$modules_stage/lib/"
@@ -135,14 +154,67 @@ for name in install.conf cmdline devicetree; do
     cp "/etc/kernel/\$name" "\$temp_kernel_dir/\$name.orig"
   fi
 done
+if [ -s /etc/kernel/cmdline ]; then
+  cmdline="\$(tr -s '[:space:]' ' ' </etc/kernel/cmdline)"
+else
+  cmdline="\$(tr ' ' '\n' </proc/cmdline | grep -ve '^BOOT_IMAGE=' -e '^initrd=' | tr '\n' ' ')"
+fi
+cmdline="\${cmdline%" "}"
+extra_cmdline="${extra_cmdline}"
+case " \$cmdline " in
+  *" \$extra_cmdline "*)
+    ;;
+  *)
+    if [ -n "\$extra_cmdline" ]; then
+      cmdline="\${cmdline} \$extra_cmdline"
+      cmdline="\${cmdline#" "}"
+    fi
+    ;;
+esac
 printf 'layout=bls\\n' > /etc/kernel/install.conf
+printf '%s\\n' "\$cmdline" > /etc/kernel/cmdline
 printf 'qcom/%s\\n' "$dtb_name" > /etc/kernel/devicetree
-update-initramfs -c -k $krel 2>/dev/null || true
+if command -v update-initramfs >/dev/null 2>&1; then
+  update-initramfs -c -k $krel 2>/dev/null || true
+fi
+if command -v kernel-install >/dev/null 2>&1; then
+  kernel-install --entry-token=machine-id remove $krel >/dev/null 2>&1 || true
+  kernel-install --make-entry-directory=yes --entry-token=machine-id add \
+    $krel /boot/vmlinuz-$krel /boot/initrd.img-$krel >/dev/null 2>&1 || true
+fi
+payload_root="${payload_root}"
+if [ -n "\$payload_root" ] && [ -d "\$payload_root" ]; then
+  esp_path=""
+  if command -v bootctl >/dev/null 2>&1; then
+    esp_path="\$(bootctl --print-esp-path 2>/dev/null || true)"
+  fi
+  if [ -z "\$esp_path" ] && findmnt -rn --target /boot/efi >/dev/null 2>&1; then
+    esp_path="/boot/efi"
+  fi
+  if [ -n "\$esp_path" ] && findmnt -rn --target "\$esp_path" >/dev/null 2>&1; then
+    install -d "\$esp_path/EFI/systemd/drivers" \
+               "\$esp_path/firmware/qcom/sc8280xp/HUAWEI/gaokun3"
+    install -m 0644 "\$payload_root/EFI/systemd/drivers/slbounceaa64.efi" \
+      "\$esp_path/EFI/systemd/drivers/slbounceaa64.efi"
+    install -m 0644 "\$payload_root/EFI/systemd/drivers/qebspilaa64.efi" \
+      "\$esp_path/EFI/systemd/drivers/qebspilaa64.efi"
+    install -m 0644 "\$payload_root/tcblaunch.exe" \
+      "\$esp_path/tcblaunch.exe"
+    install -m 0644 "\$payload_root/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcadsp8280.mbn" \
+      "\$esp_path/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcadsp8280.mbn"
+    install -m 0644 "\$payload_root/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qccdsp8280.mbn" \
+      "\$esp_path/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qccdsp8280.mbn"
+    install -m 0644 "\$payload_root/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcslpi8280.mbn" \
+      "\$esp_path/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcslpi8280.mbn"
+  else
+    echo "warning: EL2 payload install skipped because the ESP is not mounted" >&2
+  fi
+fi
 EOF
 
   build_deb "$image_pkg" "$image_stage" "$deb_version" \
     "Linux kernel image for gaokun3 (${krel})" \
-    "linux-firmware-gaokun3" "$DEB_ARCH" \
+    "$image_depends" "$DEB_ARCH" \
     "$postinst_script"
 
   build_deb "$modules_pkg" "$modules_stage" "$deb_version" \
@@ -222,7 +294,7 @@ if [[ "$BUILD_EL2" == "true" ]]; then
   EL2_MANIFEST_BLOCK="$(cat <<EOF
 ,
     "el2": {
-      "release": "${KREL_EL2}",
+      "release": "${EL2_KREL}",
       "packages": {
         "image": "${IMAGE_DEB_EL2}",
         "modules": "${MODULES_DEB_EL2}",
