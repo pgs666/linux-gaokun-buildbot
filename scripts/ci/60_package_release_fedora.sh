@@ -11,6 +11,8 @@ set -euo pipefail
 : "${EXCLUDED_PACKAGES:=}"
 : "${EXTRA_PACKAGES:?missing EXTRA_PACKAGES}"
 
+DISTRO_LABEL="${DISTRO_LABEL:-Fedora Linux}"
+DISTRO_TAG_PREFIX="${DISTRO_TAG_PREFIX:-fedora}"
 KREL="$(cat "$WORKDIR/kernel-release.txt")"
 BUILD_EL2="${BUILD_EL2:-false}"
 EL2_KREL=""
@@ -69,7 +71,7 @@ COMPRESSED_BASENAME="$(basename "$PACKAGE_FILE")"
 cat > "$RELEASE_BODY_FILE" <<EOF
 ## Build Information
 
-- Distribution: \`Fedora Linux ${FEDORA_RELEASE}\`
+- Distribution: \`${DISTRO_LABEL} ${FEDORA_RELEASE}\`
 - Kernel Tag: \`${KERNEL_TAG}\`
 - Kernel Release: \`${KREL}\`
 - Architecture: \`arm64\`
@@ -97,7 +99,7 @@ EOF
 
 sudo chown "$(id -u):$(id -g)" "$RELEASE_BODY_FILE"
 
-TAG_NAME="fedora${FEDORA_RELEASE}-${KREL}$(if [[ "$BUILD_EL2" == "true" ]]; then printf -- '-el2'; fi)-$(date -u +%Y%m%d%H%M%S)"
+TAG_NAME="${DISTRO_TAG_PREFIX}${FEDORA_RELEASE}-${KREL}$(if [[ "$BUILD_EL2" == "true" ]]; then printf -- '-el2'; fi)-$(date -u +%Y%m%d%H%M%S)"
 
 echo "$TAG_NAME" > "$WORKDIR/tag-name.txt"
 echo "$KREL" > "$WORKDIR/kernel-release-export.txt"

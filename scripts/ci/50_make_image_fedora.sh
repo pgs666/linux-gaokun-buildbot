@@ -10,7 +10,9 @@ set -euo pipefail
 : "${FEDORA_RELEASE:?missing FEDORA_RELEASE}"
 
 BUILD_EL2="${BUILD_EL2:-false}"
-DISPLAY_MANAGER="plasmalogin"
+DISTRO_HOSTNAME="${DISTRO_HOSTNAME:-fedora}"
+DISPLAY_MANAGER="${DISPLAY_MANAGER:-plasmalogin}"
+DESKTOP_PROFILE="${DESKTOP_PROFILE:-kde}"
 KREL="$(cat "$WORKDIR/kernel-release.txt")"
 KREL_EL2=""
 if [[ "$BUILD_EL2" == "true" ]]; then
@@ -80,8 +82,8 @@ sudo mount -t proc proc "$MNT/proc"
 sudo mount -t sysfs sys "$MNT/sys"
 sudo mount -t tmpfs tmpfs "$MNT/run"
 
-sudo chroot "$MNT" /usr/bin/env KREL="$KREL" KREL_EL2="$KREL_EL2" BUILD_EL2="$BUILD_EL2" ROOT_UUID="$ROOT_UUID" DISPLAY_MANAGER="$DISPLAY_MANAGER" /bin/bash -euxo pipefail <<'CHROOT_EOF'
-echo "fedora" > /etc/hostname
+sudo chroot "$MNT" /usr/bin/env KREL="$KREL" KREL_EL2="$KREL_EL2" BUILD_EL2="$BUILD_EL2" ROOT_UUID="$ROOT_UUID" DISPLAY_MANAGER="$DISPLAY_MANAGER" DESKTOP_PROFILE="$DESKTOP_PROFILE" DISTRO_HOSTNAME="$DISTRO_HOSTNAME" /bin/bash -euxo pipefail <<'CHROOT_EOF'
+echo "$DISTRO_HOSTNAME" > /etc/hostname
 id -u user >/dev/null 2>&1 || useradd -m -s /bin/bash -G wheel user
 echo "user:user" | chpasswd
 mkdir -p /etc/sudoers.d
@@ -97,9 +99,24 @@ cat > /var/lib/AccountsService/users/user <<'EOF'
 [User]
 Language=zh_CN.UTF-8
 EOF
-systemctl enable "$DISPLAY_MANAGER" NetworkManager sshd huawei-touchpad.service || true
+if [[ "$DISPLAY_MANAGER" == "gdm" ]]; then
+cat > /var/lib/AccountsService/users/gdm <<'EOF'
+[User]
+Language=zh_CN.UTF-8
+SystemAccount=true
+EOF
+fi
+
+enable_units=(
+  "$DISPLAY_MANAGER"
+  NetworkManager
+  sshd
+  huawei-touchpad.service
+)
+systemctl enable "${enable_units[@]}" || true
 
 install -d -m 0755 -o user -g user /home/user/.config
+if [[ "$DESKTOP_PROFILE" == "kde" ]]; then
 cat > /home/user/.config/kwinoutputconfig.json <<'EOF'
 [
   {
@@ -147,7 +164,6 @@ cat > /home/user/.config/kcminputrc <<'EOF'
 cursorTheme=breeze_cursors
 EOF
 chown user:user /home/user/.config/kcminputrc
-
 install -d -m 0700 -o plasmalogin -g plasmalogin /var/lib/plasmalogin/.config
 install -d -m 0755 -o plasmalogin -g plasmalogin /var/lib/plasmalogin/.config/kdedefaults
 install -m 0600 -o plasmalogin -g plasmalogin /home/user/.config/kwinoutputconfig.json \
@@ -156,6 +172,39 @@ install -m 0600 -o plasmalogin -g plasmalogin /home/user/.config/kcminputrc \
   /var/lib/plasmalogin/.config/kcminputrc
 install -m 0644 -o plasmalogin -g plasmalogin /home/user/.config/kcminputrc \
   /var/lib/plasmalogin/.config/kdedefaults/kcminputrc
+else
+cat > /home/user/.config/monitors.xml <<'EOF'
+<monitors version="2">
+    <configuration>
+        <layoutmode>logical</layoutmode>
+        <logicalmonitor>
+            <x>0</x>
+            <y>0</y>
+            <scale>1.6666666269302368</scale>
+            <primary>yes</primary>
+            <transform>
+                <rotation>right</rotation>
+                <flipped>no</flipped>
+            </transform>
+            <monitor>
+                <monitorspec>
+                    <connector>DSI-1</connector>
+                    <vendor>unknown</vendor>
+                    <product>unknown</product>
+                    <serial>unknown</serial>
+                </monitorspec>
+                <mode>
+                    <width>1600</width>
+                    <height>2560</height>
+                    <rate>60.000</rate>
+                </mode>
+            </monitor>
+        </logicalmonitor>
+    </configuration>
+</monitors>
+EOF
+chown user:user /home/user/.config/monitors.xml
+fi
 
 mkdir -p /etc/modules-load.d
 echo -e "pci-pwrctrl-pwrseq\nath11k_pci" > /etc/modules-load.d/wifi.conf
@@ -250,6 +299,18 @@ sudo install -Dm0644 "$GAOKUN_DIR/tools/touchscreen-tuner/tune.py" \
   "$MNT/usr/local/share/gaokun-touchscreen-tuner/tune.py"
 sudo install -Dm0644 "$GAOKUN_DIR/tools/touchscreen-tuner/gaokun-touchscreen-tuner.desktop" \
   "$MNT/usr/local/share/applications/gaokun-touchscreen-tuner.desktop"
+sudo install -Dm0755 "$GAOKUN_DIR/tools/monitors/gdm-monitor-sync" \
+  "$MNT/usr/local/bin/gdm-monitor-sync"
+sudo install -Dm0644 "$GAOKUN_DIR/tools/monitors/gdm-monitor-sync.service" \
+  "$MNT/etc/systemd/system/gdm-monitor-sync.service"
+sudo install -Dm0644 "$GAOKUN_DIR/tools/mpv/mpv.conf" \
+  "$MNT/etc/skel/.config/mpv/mpv.conf"
+sudo install -Dm0644 "$GAOKUN_DIR/tools/mpv/mpv.conf" \
+  "$MNT/home/user/.config/mpv/mpv.conf"
+sudo chroot "$MNT" chown -R user:user /home/user/.config/mpv
+if [[ "$DISPLAY_MANAGER" == "gdm" ]]; then
+  sudo chroot "$MNT" systemctl enable gdm-monitor-sync.service || true
+fi
 
 if [[ "$BUILD_EL2" == "true" && -n "$KREL_EL2" ]]; then
   sudo mkdir -p "$MNT/boot/efi/EFI/systemd/drivers" "$MNT/boot/efi/firmware"

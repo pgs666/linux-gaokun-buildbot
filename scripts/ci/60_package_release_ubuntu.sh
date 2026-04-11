@@ -10,6 +10,8 @@ set -euo pipefail
 : "${DESKTOP_ENVIRONMENT:?missing DESKTOP_ENVIRONMENT}"
 : "${EXTRA_PACKAGES:?missing EXTRA_PACKAGES}"
 
+DISTRO_LABEL="${DISTRO_LABEL:-Ubuntu}"
+DISTRO_TAG_PREFIX="${DISTRO_TAG_PREFIX:-ubuntu}"
 KREL="$(cat "$WORKDIR/kernel-release.txt")"
 BUILD_EL2="${BUILD_EL2:-false}"
 EL2_KREL=""
@@ -43,7 +45,7 @@ if [ "$(stat -c '%s' "$ZST_FILE")" -lt "$SPLIT_THRESHOLD_BYTES" ]; then
   cat > "$RELEASE_BODY_FILE" <<EOF
 ## Build Information
 
-- Distribution: \`Ubuntu ${UBUNTU_RELEASE}\`
+- Distribution: \`${DISTRO_LABEL} ${UBUNTU_RELEASE}\`
 - Kernel Tag: \`${KERNEL_TAG}\`
 - Kernel Release: \`${KREL}\`
 - Architecture: \`arm64\`
@@ -73,7 +75,7 @@ else
   cat > "$RELEASE_BODY_FILE" <<EOF
 ## Build Information
 
-- Distribution: \`Ubuntu ${UBUNTU_RELEASE}\`
+- Distribution: \`${DISTRO_LABEL} ${UBUNTU_RELEASE}\`
 - Kernel Tag: \`${KERNEL_TAG}\`
 - Kernel Release: \`${KREL}\`
 - Architecture: \`arm64\`
@@ -107,7 +109,7 @@ fi
 
 sudo chown "$(id -u):$(id -g)" "$RELEASE_BODY_FILE"
 
-TAG_NAME="ubuntu${UBUNTU_RELEASE}-${KREL}$(if [[ "$BUILD_EL2" == "true" ]]; then printf -- '-el2'; fi)-$(date -u +%Y%m%d%H%M%S)"
+TAG_NAME="${DISTRO_TAG_PREFIX}${UBUNTU_RELEASE}-${KREL}$(if [[ "$BUILD_EL2" == "true" ]]; then printf -- '-el2'; fi)-$(date -u +%Y%m%d%H%M%S)"
 
 echo "$TAG_NAME" > "$WORKDIR/tag-name.txt"
 echo "$KREL" > "$WORKDIR/kernel-release-export.txt"

@@ -10,6 +10,9 @@ set -euo pipefail
 : "${UBUNTU_RELEASE:?missing UBUNTU_RELEASE}"
 
 BUILD_EL2="${BUILD_EL2:-false}"
+DISTRO_HOSTNAME="${DISTRO_HOSTNAME:-ubuntu}"
+DISPLAY_MANAGER="${DISPLAY_MANAGER:-gdm}"
+DESKTOP_PROFILE="${DESKTOP_PROFILE:-gnome}"
 KREL="$(cat "$WORKDIR/kernel-release.txt")"
 KREL_EL2=""
 if [[ "$BUILD_EL2" == "true" ]]; then
@@ -66,8 +69,8 @@ sudo mount -t proc proc "$MNT/proc"
 sudo mount -t sysfs sys "$MNT/sys"
 sudo mount -t tmpfs tmpfs "$MNT/run"
 
-sudo chroot "$MNT" /usr/bin/env KREL="$KREL" KREL_EL2="$KREL_EL2" BUILD_EL2="$BUILD_EL2" ROOT_UUID="$ROOT_UUID" /bin/bash -euxo pipefail <<'CHROOT_EOF'
-echo "ubuntu" > /etc/hostname
+sudo chroot "$MNT" /usr/bin/env KREL="$KREL" KREL_EL2="$KREL_EL2" BUILD_EL2="$BUILD_EL2" ROOT_UUID="$ROOT_UUID" DISPLAY_MANAGER="$DISPLAY_MANAGER" DESKTOP_PROFILE="$DESKTOP_PROFILE" DISTRO_HOSTNAME="$DISTRO_HOSTNAME" /bin/bash -euxo pipefail <<'CHROOT_EOF'
+echo "$DISTRO_HOSTNAME" > /etc/hostname
 id -u user >/dev/null 2>&1 || useradd -m -s /bin/bash -G sudo user
 echo "user:user" | chpasswd
 mkdir -p /etc/sudoers.d
@@ -87,13 +90,61 @@ cat > /var/lib/AccountsService/users/user <<'EOF'
 [User]
 Language=zh_CN.UTF-8
 EOF
+if [[ "$DISPLAY_MANAGER" == "gdm" ]]; then
 cat > /var/lib/AccountsService/users/gdm <<'EOF'
 [User]
 Language=zh_CN.UTF-8
 SystemAccount=true
 EOF
+fi
 
 mkdir -p /home/user/.config
+if [[ "$DESKTOP_PROFILE" == "kde" ]]; then
+cat > /home/user/.config/kwinoutputconfig.json <<'EOF'
+[
+  {
+    "name": "outputs",
+    "data": [
+      {
+        "autoRotation": "InTabletMode",
+        "connectorName": "DSI-1",
+        "mode": {
+          "height": 2560,
+          "refreshRate": 120000,
+          "width": 1600
+        },
+        "scale": 1.5,
+        "transform": "Rotated270"
+      }
+    ]
+  },
+  {
+    "name": "setups",
+    "data": [
+      {
+        "lidClosed": false,
+        "outputs": [
+          {
+            "enabled": true,
+            "outputIndex": 0,
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "priority": 1,
+            "replicationSource": ""
+          }
+        ]
+      }
+    ]
+  }
+]
+EOF
+cat > /home/user/.config/kcminputrc <<'EOF'
+[Mouse]
+cursorTheme=breeze_cursors
+EOF
+else
 cat > /home/user/.config/monitors.xml <<'EOF'
 <monitors version="2">
     <configuration>
@@ -124,6 +175,7 @@ cat > /home/user/.config/monitors.xml <<'EOF'
     </configuration>
 </monitors>
 EOF
+fi
 chown -R user:user /home/user
 
 install -d -m 1777 -o root -g root /tmp/.X11-unix
@@ -131,8 +183,8 @@ install -d -m 1777 -o root -g root /tmp/.X11-unix
 cat > /etc/systemd/system/gaokun-fix-x11-unix.service <<'EOF'
 [Unit]
 Description=Fix /tmp/.X11-unix ownership for Xwayland
-After=gdm.service
-Wants=gdm.service
+After=display-manager.service
+Wants=display-manager.service
 
 [Service]
 Type=oneshot
@@ -142,8 +194,17 @@ ExecStart=/bin/sh -c 'mkdir -p /tmp/.X11-unix && chown root:root /tmp/.X11-unix 
 WantedBy=graphical.target
 EOF
 
-systemctl enable gdm NetworkManager ssh huawei-touchpad.service \
-  gaokun-fix-x11-unix.service gdm-monitor-sync.service || true
+enable_units=(
+  "$DISPLAY_MANAGER"
+  NetworkManager
+  ssh
+  huawei-touchpad.service
+  gaokun-fix-x11-unix.service
+)
+if [[ "$DISPLAY_MANAGER" == "gdm" ]]; then
+  enable_units+=(gdm-monitor-sync.service)
+fi
+systemctl enable "${enable_units[@]}" || true
 
 mkdir -p /etc/modules-load.d
 echo -e "pci-pwrctrl-pwrseq\nath11k_pci" > /etc/modules-load.d/wifi.conf
@@ -277,6 +338,11 @@ sudo install -Dm0644 "$GAOKUN_DIR/tools/touchscreen-tuner/tune.py" \
   "$MNT/usr/local/share/gaokun-touchscreen-tuner/tune.py"
 sudo install -Dm0644 "$GAOKUN_DIR/tools/touchscreen-tuner/gaokun-touchscreen-tuner.desktop" \
   "$MNT/usr/local/share/applications/gaokun-touchscreen-tuner.desktop"
+sudo install -Dm0644 "$GAOKUN_DIR/tools/mpv/mpv.conf" \
+  "$MNT/etc/skel/.config/mpv/mpv.conf"
+sudo install -Dm0644 "$GAOKUN_DIR/tools/mpv/mpv.conf" \
+  "$MNT/home/user/.config/mpv/mpv.conf"
+sudo chroot "$MNT" chown -R user:user /home/user/.config/mpv
 
 if [[ "$BUILD_EL2" == "true" && -n "$KREL_EL2" ]]; then
   sudo mkdir -p "$MNT/boot/efi/EFI/systemd/drivers" "$MNT/boot/efi/firmware"
