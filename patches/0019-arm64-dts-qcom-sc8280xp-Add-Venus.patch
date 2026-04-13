@@ -1,38 +1,30 @@
-From 4ede9f8d12b3bddf052fbefe250b764c14298e03 Mon Sep 17 00:00:00 2001
-From: Konrad Dybcio <konradybcio@kernel.org>
-Date: Sun, 25 Jan 2026 17:33:01 +0200
-Subject: [PATCH 16/16] arm64: dts: qcom: sc8280xp: Add Venus
+From 767d2110f2247a6e3e7b21565041770e8b2eb914 Mon Sep 17 00:00:00 2001
+From: Konrad Dybcio <konrad.dybcio@linaro.org>
+Date: Tue, 25 Apr 2023 13:55:39 +0000
+Subject: [PATCH] arm64: dts: qcom: sc8280xp: Add Venus
 
 Add the required nodes to enable Venus on sc8280xp.
-
-[ bod: added interconnect tags ]
 
 Signed-off-by: Konrad Dybcio <konrad.dybcio@linaro.org>
 [ johan: use sm8350 videocc defines ]
 Signed-off-by: Johan Hovold <johan+linaro@kernel.org>
-[ bod: dropped video encoder/decoder declarations ]
-Signed-off-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
-[ db: dropped llcc icc, switched to sc8280xp compat, added more freqs ]
-Signed-off-by: Dmitry Baryshkov <dmitry.baryshkov@oss.qualcomm.com>
 ---
- arch/arm64/boot/dts/qcom/sc8280xp.dtsi | 89 ++++++++++++++++++++++++++
- 1 file changed, 89 insertions(+)
+ arch/arm64/boot/dts/qcom/sc8280xp.dtsi | 86 ++++++++++++++++++++++++++
+ 1 file changed, 86 insertions(+)
 
 diff --git a/arch/arm64/boot/dts/qcom/sc8280xp.dtsi b/arch/arm64/boot/dts/qcom/sc8280xp.dtsi
-index b817083992d7..472e9aaea160 100644
+index d1bb89dbed59..43418398c3a1 100644
 --- a/arch/arm64/boot/dts/qcom/sc8280xp.dtsi
 +++ b/arch/arm64/boot/dts/qcom/sc8280xp.dtsi
-@@ -11,7 +11,9 @@
+@@ -11,6 +11,7 @@
  #include <dt-bindings/clock/qcom,rpmh.h>
  #include <dt-bindings/clock/qcom,sc8280xp-camcc.h>
  #include <dt-bindings/clock/qcom,sc8280xp-lpasscc.h>
 +#include <dt-bindings/clock/qcom,sm8350-videocc.h>
  #include <dt-bindings/dma/qcom-gpi.h>
-+#include <dt-bindings/interconnect/qcom,icc.h>
  #include <dt-bindings/interconnect/qcom,osm-l3.h>
  #include <dt-bindings/interconnect/qcom,sc8280xp.h>
- #include <dt-bindings/interrupt-controller/arm-gic.h>
-@@ -692,6 +694,11 @@ reserved-region@85b00000 {
+@@ -692,6 +693,11 @@ reserved-region@85b00000 {
  			no-map;
  		};
  
@@ -41,15 +33,15 @@ index b817083992d7..472e9aaea160 100644
 +			no-map;
 +		};
 +
- 		pil_adsp_mem: adsp-region@86c00000 {
- 			reg = <0 0x86c00000 0 0x2000000>;
+ 		pil_gpu_mem: gpu-mem@8bf00000 {
+ 			reg = <0 0x8bf00000 0 0x2000>;
  			no-map;
-@@ -4209,6 +4216,88 @@ usb_1_dwc3_ss: endpoint {
+@@ -4182,6 +4188,86 @@ usb_1_dwc3_ss: endpoint {
  			};
  		};
  
 +		venus: video-codec@aa00000 {
-+			compatible = "qcom,sc8280xp-venus";
++			compatible = "qcom,sm8350-venus";
 +			reg = <0 0x0aa00000 0 0x100000>;
 +			interrupts = <GIC_SPI 174 IRQ_TYPE_LEVEL_HIGH>;
 +
@@ -69,18 +61,26 @@ index b817083992d7..472e9aaea160 100644
 +			resets = <&gcc GCC_VIDEO_AXI0_CLK_ARES>;
 +			reset-names = "core";
 +
-+			interconnects = <&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ACTIVE_ONLY
-+					 &config_noc SLAVE_VENUS_CFG QCOM_ICC_TAG_ACTIVE_ONLY>,
-+					<&mmss_noc MASTER_VIDEO_P0 QCOM_ICC_TAG_ALWAYS
-+					 &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ALWAYS>;
++			interconnects = <&gem_noc MASTER_APPSS_PROC 0 &config_noc SLAVE_VENUS_CFG 0>,
++					<&mmss_noc MASTER_VIDEO_P0 0 &mc_virt SLAVE_EBI1 0>,
++					<&mmss_noc MASTER_VIDEO_P0 0 &gem_noc SLAVE_LLCC 0>;
 +			interconnect-names = "cpu-cfg",
-+					     "video-mem";
++					     "video-mem",
++					     "video-llcc";
 +
 +			operating-points-v2 = <&venus_opp_table>;
 +			iommus = <&apps_smmu 0x2e00 0x400>;
 +			memory-region = <&pil_video_mem>;
 +
 +			status = "disabled";
++
++			video-decoder {
++				compatible = "venus-decoder";
++			};
++
++			video-encoder {
++				compatible = "venus-encoder";
++			};
 +
 +			venus_opp_table: opp-table {
 +				compatible = "operating-points-v2";
@@ -103,16 +103,6 @@ index b817083992d7..472e9aaea160 100644
 +				opp-1332000000 {
 +					opp-hz = /bits/ 64 <1332000000>;
 +					required-opps = <&rpmhpd_opp_nom>;
-+				};
-+
-+				opp-1599000000 {
-+					opp-hz = /bits/ 64 <1599000000>;
-+					required-opps = <&rpmhpd_opp_turbo>;
-+				};
-+
-+				opp-1680000000 {
-+					opp-hz = /bits/ 64 <1680000000>;
-+					required-opps = <&rpmhpd_opp_turbo_l1>;
 +				};
 +			};
 +		};

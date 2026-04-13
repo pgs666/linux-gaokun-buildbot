@@ -6,7 +6,7 @@ on:
       kernel_tag:
         description: Linux kernel tag
         required: true
-        default: "v7.0-rc7"
+        default: "v7.0"
       build_el2:
         description: Build extra -gaokun3-el2 kernel packages
         required: true
