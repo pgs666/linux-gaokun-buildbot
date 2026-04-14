@@ -338,6 +338,11 @@ jobs:
 
           sudo chroot "$ROOTFS_DIR" /usr/bin/env PKG_ARGS="${chroot_pkg_args[*]}" /bin/bash -euxo pipefail <<'EOF'
           read -r -a pkgs <<< "$PKG_ARGS"
+          # Our firmware package replaces ath11k blobs shipped by linux-firmware-atheros.
+          # Remove the split package first to avoid file-conflict aborts on pacman -U.
+          if pacman -Qq linux-firmware-atheros >/dev/null 2>&1; then
+            pacman -Rdd --noconfirm linux-firmware-atheros
+          fi
           pacman -U --noconfirm "${pkgs[@]}"
           rm -rf /tmp/gaokun-pkgs
           EOF
