@@ -288,7 +288,7 @@ jobs:
           pacman -S --noconfirm --needed \
             ${DESKTOP_ENVIRONMENT} \
             sudo openssh networkmanager sddm \
-            mkinitcpio systemd \
+            mkinitcpio systemd btrfs-progs dosfstools wireless-regdb \
             noto-fonts-cjk noto-fonts-emoji \
             i2c-tools alsa-utils pipewire pipewire-alsa wireplumber \
             ${EXTRA_PACKAGES}
