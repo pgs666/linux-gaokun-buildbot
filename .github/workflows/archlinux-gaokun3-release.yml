@@ -18,7 +18,7 @@ on:
       extra_packages:
         description: Extra packages to install (space-separated)
         required: true
-        default: "fcitx5-im fcitx5-chinese-addons mpv v4l-utils vim nano ripgrep git htop fastfetch screen firefox sddm breeze breeze-gtk kde-gtk-config plasma-wayland-session konsole dolphin"
+        default: "fcitx5-im fcitx5-chinese-addons mpv v4l-utils vim nano ripgrep git htop fastfetch screen firefox sddm breeze breeze-gtk kde-gtk-config konsole dolphin"
       build_el2:
         description: Build and include optional -el2 kernel and EL2 EFI payloads
         required: true
