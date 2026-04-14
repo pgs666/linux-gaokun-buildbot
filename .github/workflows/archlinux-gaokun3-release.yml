@@ -104,7 +104,12 @@ jobs:
               "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
               -o "$releases_json"
 
-            package_release_tag="$(jq -r --arg prefix "$prefix" '.[] | select(.tag_name | startswith($prefix)) | .tag_name' "$releases_json" | head -n 1)"
+            package_release_tag="$(jq -r --arg prefix "$prefix" '
+              .[]
+              | select(.tag_name | startswith($prefix))
+              | select((.tag_name | ltrimstr($prefix)) | test("^[0-9]{14}$"))
+              | .tag_name
+            ' "$releases_json" | head -n 1)"
             if [[ -z "$package_release_tag" ]]; then
               echo "no package release found for prefix ${prefix}" >&2
               exit 1
@@ -155,8 +160,8 @@ jobs:
             exit 1
           fi
 
-          if [[ "$BUILD_EL2" == "true" && "$manifest_build_el2" != "true" ]]; then
-            echo "package release ${PACKAGE_RELEASE_TAG} does not contain EL2 packages" >&2
+          if [[ "$manifest_build_el2" != "$BUILD_EL2" ]]; then
+            echo "package release build_el2 mismatch: expected ${BUILD_EL2}, got ${manifest_build_el2}" >&2
             exit 1
           fi
 
@@ -187,7 +192,19 @@ jobs:
           done
 
           if [[ -f "$PACKAGE_PKGS_DIR/package-sha256sums.txt" ]]; then
-            (cd "$PACKAGE_PKGS_DIR" && sha256sum -c package-sha256sums.txt)
+            checksum_verify_file="$PACKAGE_PKGS_DIR/package-sha256sums.selected.txt"
+            : > "$checksum_verify_file"
+
+            for verify_target in "${asset_names[@]}" package-manifest.json; do
+              checksum_line="$(awk -v target="$verify_target" '$2 == target || $2 == "./" target { print; exit }' "$PACKAGE_PKGS_DIR/package-sha256sums.txt")"
+              if [[ -z "$checksum_line" ]]; then
+                echo "missing checksum entry ${verify_target} in release ${PACKAGE_RELEASE_TAG}" >&2
+                exit 1
+              fi
+              printf '%s\n' "$checksum_line" >> "$checksum_verify_file"
+            done
+
+            (cd "$PACKAGE_PKGS_DIR" && sha256sum -c "$(basename "$checksum_verify_file")")
           fi
 
       - name: Bootstrap Arch Linux ARM rootfs
