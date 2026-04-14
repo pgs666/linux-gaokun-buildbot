@@ -6,7 +6,7 @@ on:
       arch_mirror_url:
         description: Arch Linux ARM mirror base URL
         required: true
-        default: "http://fl.us.mirror.archlinuxarm.org"
+        default: "https://mirror.archlinuxarm.org"
       kernel_tag:
         description: Linux kernel tag
         required: true
@@ -14,11 +14,11 @@ on:
       desktop_environment:
         description: Desktop environment package group
         required: true
-        default: "gnome"
+        default: "plasma"
       extra_packages:
         description: Extra packages to install (space-separated)
         required: true
-        default: "fcitx5-im fcitx5-chinese-addons gnome-tweaks extension-manager mpv v4l-utils vim nano ripgrep git htop fastfetch screen firefox"
+        default: "fcitx5-im fcitx5-chinese-addons mpv v4l-utils vim nano ripgrep git htop fastfetch screen firefox sddm breeze breeze-gtk kde-gtk-config plasma-wayland-session konsole dolphin"
       build_el2:
         description: Build and include optional -el2 kernel and EL2 EFI payloads
         required: true
@@ -180,11 +180,35 @@ jobs:
         run: |
           set -euxo pipefail
           ROOTFS_TAR="$WORKDIR/ArchLinuxARM-aarch64-latest.tar.gz"
-          curl -fsSL "$ARCH_MIRROR_URL/os/ArchLinuxARM-aarch64-latest.tar.gz" -o "$ROOTFS_TAR"
+
+          mirror_candidates=(
+            "$ARCH_MIRROR_URL"
+            "https://mirror.archlinuxarm.org"
+            "http://mirror.archlinuxarm.org"
+            "http://tw.mirror.archlinuxarm.org"
+            "http://eu.mirror.archlinuxarm.org"
+            "http://de3.mirror.archlinuxarm.org"
+          )
+
+          selected_mirror=""
+          for mirror in "${mirror_candidates[@]}"; do
+            mirror="${mirror%/}"
+            if curl -fsSL --connect-timeout 10 --retry 3 --retry-all-errors \
+              "$mirror/os/ArchLinuxARM-aarch64-latest.tar.gz" -o "$ROOTFS_TAR"; then
+              selected_mirror="$mirror"
+              break
+            fi
+          done
+
+          if [[ -z "$selected_mirror" ]]; then
+            echo "failed to download ArchLinuxARM rootfs from all configured mirrors" >&2
+            exit 1
+          fi
+
           sudo bsdtar -xpf "$ROOTFS_TAR" -C "$ROOTFS_DIR"
 
           sudo tee "$ROOTFS_DIR/etc/pacman.d/mirrorlist" >/dev/null <<EOF
-          Server = ${ARCH_MIRROR_URL}/\$arch/\$repo
+          Server = ${selected_mirror}/\$arch/\$repo
           EOF
 
           sudo cp /etc/resolv.conf "$ROOTFS_DIR/etc/resolv.conf"
@@ -200,7 +224,7 @@ jobs:
           pacman -Syyu --noconfirm
           pacman -S --noconfirm --needed \
             ${DESKTOP_ENVIRONMENT} \
-            sudo openssh networkmanager gdm \
+            sudo openssh networkmanager sddm \
             mkinitcpio systemd \
             noto-fonts-cjk noto-fonts-emoji \
             i2c-tools alsa-utils pipewire pipewire-alsa wireplumber \

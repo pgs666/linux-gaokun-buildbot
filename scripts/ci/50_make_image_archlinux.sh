@@ -11,6 +11,7 @@ set -euo pipefail
 : "${IMAGE_SIZE:?missing IMAGE_SIZE}"
 
 BUILD_EL2="${BUILD_EL2:-false}"
+DISPLAY_MANAGER="${DISPLAY_MANAGER:-sddm}"
 KREL="$(cat "$WORKDIR/kernel-release.txt")"
 KREL_EL2=""
 if [[ "$BUILD_EL2" == "true" && -f "$WORKDIR/kernel-release-el2.txt" ]]; then
@@ -77,7 +78,7 @@ sudo mount -t proc proc "$MNT/proc"
 sudo mount -t sysfs sys "$MNT/sys"
 sudo mount -t tmpfs tmpfs "$MNT/run"
 
-sudo chroot "$MNT" /usr/bin/env KREL="$KREL" KREL_EL2="$KREL_EL2" BUILD_EL2="$BUILD_EL2" ROOT_UUID="$ROOT_UUID" /bin/bash -euxo pipefail <<'CHROOT_EOF'
+sudo chroot "$MNT" /usr/bin/env KREL="$KREL" KREL_EL2="$KREL_EL2" BUILD_EL2="$BUILD_EL2" ROOT_UUID="$ROOT_UUID" DISPLAY_MANAGER="$DISPLAY_MANAGER" /bin/bash -euxo pipefail <<'CHROOT_EOF'
 echo "archlinux" > /etc/hostname
 id -u user >/dev/null 2>&1 || useradd -m -s /bin/bash -G wheel user
 echo "user:user" | chpasswd
@@ -98,18 +99,29 @@ cat > /var/lib/AccountsService/users/user <<'EOF'
 [User]
 Language=zh_CN.UTF-8
 EOF
+if [[ "$DISPLAY_MANAGER" == "gdm" ]]; then
 cat > /var/lib/AccountsService/users/gdm <<'EOF'
 [User]
 Language=zh_CN.UTF-8
 SystemAccount=true
 EOF
+fi
 
 install -d -m 0755 /home/user/.config
 install -Dm644 /usr/local/share/gaokun/monitors.xml /home/user/.config/monitors.xml
 chown user:user /home/user/.config/monitors.xml
 
-systemctl enable gdm NetworkManager sshd huawei-touchpad.service \
-  gdm-monitor-sync.service patch-nvm-bdaddr.service || true
+enable_units=(
+  "$DISPLAY_MANAGER"
+  NetworkManager
+  sshd
+  huawei-touchpad.service
+  patch-nvm-bdaddr.service
+)
+if [[ "$DISPLAY_MANAGER" == "gdm" ]]; then
+  enable_units+=(gdm-monitor-sync.service)
+fi
+systemctl enable "${enable_units[@]}" || true
 
 mkdir -p /etc/initcpio/install /etc/initcpio/hooks
 cat > /etc/initcpio/install/gaokun3-firmware <<'EOF'
