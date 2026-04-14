@@ -254,6 +254,8 @@ jobs:
           sudo mount -t tmpfs tmpfs "$ROOTFS_DIR/run"
 
           sudo chroot "$ROOTFS_DIR" /bin/bash -euxo pipefail <<EOF
+          sed -i 's/^CheckSpace/#CheckSpace/' /etc/pacman.conf || true
+          mkdir -p /var/cache/pacman/pkg
           pacman-key --init || true
           pacman-key --populate archlinuxarm || true
           pacman -Syyu --noconfirm
