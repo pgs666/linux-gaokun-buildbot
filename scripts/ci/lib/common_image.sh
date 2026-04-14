@@ -4,6 +4,7 @@ set -euo pipefail
 install_common_image_assets() {
   local rootfs_dir="$1"
   local gaokun_dir="$2"
+  local touchscreen_share_dir="/usr/local/share/gaokun-touchscreen-tuner"
   local directory_assets=(
     "tools/image-assets/etc/modules-load.d:/etc/modules-load.d"
     "tools/image-assets/etc/modprobe.d:/etc/modprobe.d"
@@ -12,7 +13,7 @@ install_common_image_assets() {
   local executable_assets=(
     "tools/bluetooth/patch-nvm-bdaddr.py:/usr/local/bin/patch-nvm-bdaddr.py"
     "tools/monitors/gdm-monitor-sync:/usr/local/bin/gdm-monitor-sync"
-    "tools/touchscreen-tuner/touchscreen-tune:/usr/local/bin/touchscreen-tune"
+    "tools/touchscreen-tuner/gaokun-touchscreen-tuner:/usr/local/bin/gaokun-touchscreen-tuner"
     "tools/touchpad/huawei-tp-activate.py:/usr/local/bin/huawei-tp-activate.py"
   )
   local service_assets=(
@@ -21,9 +22,9 @@ install_common_image_assets() {
     "tools/touchpad/huawei-touchpad.service:/etc/systemd/system/huawei-touchpad.service"
   )
   local data_assets=(
-    "tools/touchscreen-tuner/tune.py:/usr/local/lib/gaokun-touchscreen-tuner/tune.py"
-    "tools/touchscreen-tuner/tune-icon.svg:/usr/local/lib/gaokun-touchscreen-tuner/tune-icon.svg"
-    "tools/touchscreen-tuner/touchscreen-tune.desktop:/usr/share/applications/touchscreen-tune.desktop"
+    "tools/touchscreen-tuner/tune.py:${touchscreen_share_dir}/tune.py"
+    "tools/touchscreen-tuner/tune-icon.svg:${touchscreen_share_dir}/tune-icon.svg"
+    "tools/touchscreen-tuner/gaokun-touchscreen-tuner.desktop:/usr/share/applications/gaokun-touchscreen-tuner.desktop"
     "tools/image-assets/usr/local/share/gaokun/monitors.xml:/usr/local/share/gaokun/monitors.xml"
   )
   local asset src dest
@@ -34,7 +35,8 @@ install_common_image_assets() {
     "$rootfs_dir/etc/sddm.conf.d" \
     "$rootfs_dir/etc/systemd/system" \
     "$rootfs_dir/usr/local/bin" \
-    "$rootfs_dir/usr/local/lib/gaokun-touchscreen-tuner" \
+    "$rootfs_dir${touchscreen_share_dir}" \
+    "$rootfs_dir/usr/local/lib" \
     "$rootfs_dir/usr/share/applications" \
     "$rootfs_dir/usr/local/share/gaokun"
 
@@ -64,6 +66,9 @@ install_common_image_assets() {
     dest="${asset#*:}"
     sudo install -Dm644 "$gaokun_dir/$src" "$rootfs_dir$dest"
   done
+
+  sudo ln -sfn gaokun-touchscreen-tuner "$rootfs_dir/usr/local/bin/touchscreen-tune"
+  sudo ln -sfn ../share/gaokun-touchscreen-tuner "$rootfs_dir/usr/local/lib/gaokun-touchscreen-tuner"
 }
 
 install_el2_efi_payloads() {
