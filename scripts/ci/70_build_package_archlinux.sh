@@ -100,6 +100,12 @@ build_pkg_archive() {
     printf 'packager = cool <bilibili@att.net>\n'
   } > "$buildinfo"
 
+  # Some pacman environments are stricter about metadata files.
+  # Generate .MTREE when bsdtar is available to maximize compatibility.
+  if command -v bsdtar >/dev/null 2>&1; then
+    (cd "$archive_root" && bsdtar --format=mtree -cf .MTREE .)
+  fi
+
   tar -C "$archive_root" \
     --sort=name \
     --mtime="@$BUILD_DATE" \
