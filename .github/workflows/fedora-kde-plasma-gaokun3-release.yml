@@ -1,4 +1,4 @@
-name: Build Fedora GNOME Gaokun3 Image
+name: Build Fedora KDE Plasma Gaokun3 Image
 
 on:
   workflow_dispatch:
@@ -14,7 +14,7 @@ on:
       desktop_environment:
         description: Desktop environment package group (single package or group)
         required: true
-        default: "@gnome-desktop"
+        default: "@kde-desktop-environment"
       excluded_packages:
         description: Packages to exclude from rootfs install (comma-separated)
         required: false
@@ -22,7 +22,7 @@ on:
       extra_packages:
         description: Extra packages to install (space-separated)
         required: true
-        default: "fcitx5-chinese-addons telnet mpv v4l-utils vim nano ripgrep git htop fastfetch screen firefox gnome-tweaks gnome-extensions-app"
+        default: "fcitx5-chinese-addons telnet mpv v4l-utils vim nano ripgrep git htop fastfetch screen firefox kscreen"
       build_el2:
         description: Build and include optional -gaokun3-el2 kernel and EL2 EFI payloads
         required: true
@@ -53,10 +53,8 @@ jobs:
     env:
       TZ: UTC
       DISTRO_HOSTNAME: fedora
-      DISPLAY_MANAGER: gdm
-      DESKTOP_PROFILE: gnome
-      DISTRO_LABEL: Fedora GNOME
-      DISTRO_TAG_PREFIX: fedora-gnome
+      DISPLAY_MANAGER: plasmalogin
+      DESKTOP_PROFILE: kde
       FEDORA_RELEASE: ${{ github.event.inputs.fedora_release }}
       KERNEL_TAG: ${{ github.event.inputs.kernel_tag }}
       DESKTOP_ENVIRONMENT: ${{ github.event.inputs.desktop_environment }}
@@ -66,11 +64,11 @@ jobs:
       IMAGE_SIZE: 12G
       IMAGE_CHUNK_SIZE: 1900M
       GAOKUN_DIR: ${{ github.workspace }}
-      WORKDIR: ${{ github.workspace }}/build-fedora-gnome
-      ROOTFS_DIR: ${{ github.workspace }}/build-fedora-gnome/rootfs
-      ARTIFACT_DIR: ${{ github.workspace }}/build-fedora-gnome/artifacts
-      PACKAGE_RPMS_DIR: ${{ github.workspace }}/build-fedora-gnome/package-rpms
-      IMAGE_FILE: ${{ github.workspace }}/build-fedora-gnome/fedora-gnome-${{ github.event.inputs.fedora_release }}-gaokun3.img
+      WORKDIR: ${{ github.workspace }}/build-fedora-kde-plasma
+      ROOTFS_DIR: ${{ github.workspace }}/build-fedora-kde-plasma/rootfs
+      ARTIFACT_DIR: ${{ github.workspace }}/build-fedora-kde-plasma/artifacts
+      PACKAGE_RPMS_DIR: ${{ github.workspace }}/build-fedora-kde-plasma/package-rpms
+      IMAGE_FILE: ${{ github.workspace }}/build-fedora-kde-plasma/fedora-kde-plasma-${{ github.event.inputs.fedora_release }}-gaokun3.img
 
     steps:
       - name: Checkout
@@ -297,15 +295,11 @@ jobs:
           sudo mkdir -p \
             "$ROOTFS_DIR/usr/local/bin" \
             "$ROOTFS_DIR/etc/systemd/system" \
-            "$ROOTFS_DIR/etc/modules-load.d" \
             "$ROOTFS_DIR/usr/share/alsa/ucm2/Qualcomm/sc8280xp"
           sudo cp "$GAOKUN_DIR/tools/touchpad/huawei-tp-activate.py" "$ROOTFS_DIR/usr/local/bin/"
           sudo cp "$GAOKUN_DIR/tools/touchpad/huawei-touchpad.service" "$ROOTFS_DIR/etc/systemd/system/"
           sudo chmod +x "$ROOTFS_DIR/usr/local/bin/huawei-tp-activate.py"
           sudo cp "$GAOKUN_DIR/tools/bluetooth/patch-nvm-bdaddr.py" "$ROOTFS_DIR/usr/local/bin/"
-          sudo cp "$GAOKUN_DIR/tools/bluetooth/patch-nvm-bdaddr.service" "$ROOTFS_DIR/etc/systemd/system/"
-          sudo cp "$GAOKUN_DIR/tools/image-assets/etc/modules-load.d/bluetooth.conf" \
-            "$ROOTFS_DIR/etc/modules-load.d/"
           sudo chmod +x "$ROOTFS_DIR/usr/local/bin/patch-nvm-bdaddr.py"
           sudo cp "$GAOKUN_DIR/tools/audio/sc8280xp.conf" \
             "$ROOTFS_DIR/usr/share/alsa/ucm2/Qualcomm/sc8280xp/"
@@ -331,7 +325,7 @@ jobs:
       - name: Upload build artifacts (workflow)
         uses: actions/upload-artifact@v6
         with:
-          name: fedora-gnome-gaokun3-build
+          name: fedora-kde-plasma-gaokun3-build
           path: |
             ${{ steps.package.outputs.artifact_dir }}/${{ steps.package.outputs.package_glob }}
 
@@ -339,7 +333,7 @@ jobs:
         uses: softprops/action-gh-release@v2.6.1
         with:
           tag_name: ${{ steps.package.outputs.tag_name }}
-          name: Fedora GNOME ${{ env.FEDORA_RELEASE }} - gaokun3 - ${{ steps.package.outputs.kernel_release }}
+          name: Fedora KDE Plasma ${{ env.FEDORA_RELEASE }} - gaokun3 - ${{ steps.package.outputs.kernel_release }}
           body_path: ${{ steps.package.outputs.artifact_dir }}/${{ steps.package.outputs.release_body_file }}
           files: |
             ${{ steps.package.outputs.artifact_dir }}/${{ steps.package.outputs.package_glob }}

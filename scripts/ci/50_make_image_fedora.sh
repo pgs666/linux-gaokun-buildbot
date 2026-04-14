@@ -12,9 +12,16 @@ set -euo pipefail
 : "${FEDORA_RELEASE:?missing FEDORA_RELEASE}"
 
 BUILD_EL2="${BUILD_EL2:-false}"
+DISTRO_HOSTNAME="${DISTRO_HOSTNAME:-fedora}"
+DISPLAY_MANAGER="${DISPLAY_MANAGER:-plasmalogin}"
+DESKTOP_PROFILE="${DESKTOP_PROFILE:-kde}"
 KREL="$(cat "$WORKDIR/kernel-release.txt")"
 KREL_EL2=""
-if [[ "$BUILD_EL2" == "true" && -f "$WORKDIR/kernel-release-el2.txt" ]]; then
+if [[ "$BUILD_EL2" == "true" ]]; then
+  if [[ ! -f "$WORKDIR/kernel-release-el2.txt" ]]; then
+    echo "BUILD_EL2=true but $WORKDIR/kernel-release-el2.txt is missing" >&2
+    exit 1
+  fi
   KREL_EL2="$(cat "$WORKDIR/kernel-release-el2.txt")"
 fi
 
@@ -78,8 +85,8 @@ sudo mount -t proc proc "$MNT/proc"
 sudo mount -t sysfs sys "$MNT/sys"
 sudo mount -t tmpfs tmpfs "$MNT/run"
 
-sudo chroot "$MNT" /usr/bin/env KREL="$KREL" KREL_EL2="$KREL_EL2" BUILD_EL2="$BUILD_EL2" ROOT_UUID="$ROOT_UUID" /bin/bash -euxo pipefail <<'CHROOT_EOF'
-echo "fedora" > /etc/hostname
+sudo chroot "$MNT" /usr/bin/env KREL="$KREL" KREL_EL2="$KREL_EL2" BUILD_EL2="$BUILD_EL2" ROOT_UUID="$ROOT_UUID" DISPLAY_MANAGER="$DISPLAY_MANAGER" DESKTOP_PROFILE="$DESKTOP_PROFILE" DISTRO_HOSTNAME="$DISTRO_HOSTNAME" /bin/bash -euxo pipefail <<'CHROOT_EOF'
+echo "$DISTRO_HOSTNAME" > /etc/hostname
 id -u user >/dev/null 2>&1 || useradd -m -s /bin/bash -G wheel user
 echo "user:user" | chpasswd
 mkdir -p /etc/sudoers.d
@@ -95,20 +102,90 @@ cat > /var/lib/AccountsService/users/user <<'EOF'
 [User]
 Language=zh_CN.UTF-8
 EOF
+if [[ "$DISPLAY_MANAGER" == "gdm" ]]; then
 cat > /var/lib/AccountsService/users/gdm <<'EOF'
 [User]
 Language=zh_CN.UTF-8
 SystemAccount=true
 EOF
+fi
 
-if [[ -f /usr/local/share/gaokun/monitors.xml ]]; then
-  install -d -m 0755 /home/user/.config
+install -d -m 0755 -o user -g user /home/user/.config
+if [[ "$DESKTOP_PROFILE" == "kde" ]]; then
+cat > /home/user/.config/kwinoutputconfig.json <<'EOF'
+[
+  {
+    "name": "outputs",
+    "data": [
+      {
+        "autoRotation": "InTabletMode",
+        "connectorName": "DSI-1",
+        "mode": {
+          "height": 2560,
+          "refreshRate": 120000,
+          "width": 1600
+        },
+        "scale": 1.5,
+        "transform": "Rotated270"
+      }
+    ]
+  },
+  {
+    "name": "setups",
+    "data": [
+      {
+        "lidClosed": false,
+        "outputs": [
+          {
+            "enabled": true,
+            "outputIndex": 0,
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "priority": 1,
+            "replicationSource": ""
+          }
+        ]
+      }
+    ]
+  }
+]
+EOF
+chown user:user /home/user/.config/kwinoutputconfig.json
+
+cat > /home/user/.config/kcminputrc <<'EOF'
+[Mouse]
+cursorTheme=breeze_cursors
+EOF
+chown user:user /home/user/.config/kcminputrc
+
+if id -u plasmalogin >/dev/null 2>&1; then
+  install -d -m 0700 -o plasmalogin -g plasmalogin /var/lib/plasmalogin/.config
+  install -d -m 0755 -o plasmalogin -g plasmalogin /var/lib/plasmalogin/.config/kdedefaults
+  install -m 0600 -o plasmalogin -g plasmalogin /home/user/.config/kwinoutputconfig.json \
+    /var/lib/plasmalogin/.config/kwinoutputconfig.json
+  install -m 0600 -o plasmalogin -g plasmalogin /home/user/.config/kcminputrc \
+    /var/lib/plasmalogin/.config/kcminputrc
+  install -m 0644 -o plasmalogin -g plasmalogin /home/user/.config/kcminputrc \
+    /var/lib/plasmalogin/.config/kdedefaults/kcminputrc
+fi
+elif [[ -f /usr/local/share/gaokun/monitors.xml ]]; then
   install -Dm644 /usr/local/share/gaokun/monitors.xml /home/user/.config/monitors.xml
   chown user:user /home/user/.config/monitors.xml
 fi
 
-systemctl enable gdm NetworkManager sshd huawei-touchpad.service \
-  gdm-monitor-sync.service patch-nvm-bdaddr.service || true
+enable_units=(
+  "$DISPLAY_MANAGER"
+  NetworkManager
+  sshd
+  huawei-touchpad.service
+  patch-nvm-bdaddr.service
+)
+if [[ "$DISPLAY_MANAGER" == "gdm" ]]; then
+  enable_units+=(gdm-monitor-sync.service)
+fi
+systemctl enable "${enable_units[@]}" || true
 
 cat > /etc/dracut.conf.d/matebook.conf <<'MODEOF'
 hostonly="no"
