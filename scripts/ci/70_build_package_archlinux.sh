@@ -106,13 +106,18 @@ build_pkg_archive() {
     (cd "$archive_root" && bsdtar --format=mtree -cf .MTREE .)
   fi
 
+  archive_entries=(.PKGINFO .BUILDINFO usr)
+  if [[ -f "$archive_root/.MTREE" ]]; then
+    archive_entries=(.PKGINFO .BUILDINFO .MTREE usr)
+  fi
+
   tar -C "$archive_root" \
     --sort=name \
     --mtime="@$BUILD_DATE" \
     --owner=0 --group=0 --numeric-owner \
     -I 'zstd -19 -T0' \
     -cf "$archive_path" \
-    .
+    "${archive_entries[@]}"
 
   rm -rf "$archive_root"
   printf '%s\n' "$archive_name"
