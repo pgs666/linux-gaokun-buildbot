@@ -68,7 +68,7 @@ jobs:
           sudo apt-get install -y \
             git make gcc bc bison flex cpio rsync kmod \
             libssl-dev libelf-dev dwarves ccache \
-            tar zstd
+            tar zstd libarchive-tools gzip
 
       - name: Resolve package release tag
         id: release_meta

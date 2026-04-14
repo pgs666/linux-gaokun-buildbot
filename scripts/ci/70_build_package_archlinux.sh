@@ -31,6 +31,13 @@ BUILD_DATE="$(date -u +%s)"
 
 mkdir -p "$ARTIFACT_DIR" "$PKG_TOPDIR/SOURCES" "$PKG_TOPDIR/PKGBUILDS"
 
+for tool in bsdtar gzip; do
+  if ! command -v "$tool" >/dev/null 2>&1; then
+    echo "missing required host tool: $tool" >&2
+    exit 1
+  fi
+done
+
 arch_pkgver() {
   printf '%s\n' "$1" | sed -e 's/[+-]/./g' -e 's/_/./g' -e 's/\.\.+/./g' -e 's/\.$//'
 }
@@ -100,16 +107,11 @@ build_pkg_archive() {
     printf 'packager = cool <bilibili@att.net>\n'
   } > "$buildinfo"
 
-  # Some pacman environments are stricter about metadata files.
-  # Generate .MTREE when bsdtar is available to maximize compatibility.
-  if command -v bsdtar >/dev/null 2>&1; then
-    (cd "$archive_root" && bsdtar --format=mtree -cf .MTREE .)
-  fi
+  # Match Arch package expectations by always shipping a gzip-compressed .MTREE.
+  # Build it from the payload tree only so package metadata files are excluded.
+  (cd "$stage_dir" && LANG=C bsdtar --format=mtree -cf - usr | gzip -n > "$archive_root/.MTREE")
 
-  archive_entries=(.PKGINFO .BUILDINFO usr)
-  if [[ -f "$archive_root/.MTREE" ]]; then
-    archive_entries=(.PKGINFO .BUILDINFO .MTREE usr)
-  fi
+  archive_entries=(.PKGINFO .BUILDINFO .MTREE usr)
 
   tar -C "$archive_root" \
     --sort=name \

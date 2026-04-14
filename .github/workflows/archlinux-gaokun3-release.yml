@@ -355,32 +355,37 @@ jobs:
           set -euxo pipefail
           scripts/ci/50_make_image_archlinux.sh
 
-      - name: Prepare release metadata
+      - name: Package image and generate release info
+        id: package
         run: |
           set -euxo pipefail
           scripts/ci/60_package_release_archlinux.sh
-
-      - name: Export release metadata
-        id: release_meta
-        run: |
-          set -euxo pipefail
-          echo "tag_name=$(cat "$WORKDIR/tag-name.txt")" >> "$GITHUB_OUTPUT"
+          TAG_NAME="$(cat "$WORKDIR/tag-name.txt")"
+          KREL="$(cat "$WORKDIR/kernel-release-export.txt")"
+          PACKAGE_GLOB="$(cat "$WORKDIR/package-glob.txt")"
+          RELEASE_BODY_FILE="$(cat "$WORKDIR/release-body-file.txt")"
+          echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
+          echo "artifact_dir=$ARTIFACT_DIR" >> "$GITHUB_OUTPUT"
+          echo "kernel_release=$KREL" >> "$GITHUB_OUTPUT"
+          echo "package_glob=$PACKAGE_GLOB" >> "$GITHUB_OUTPUT"
+          echo "release_body_file=$RELEASE_BODY_FILE" >> "$GITHUB_OUTPUT"
 
       - name: Upload build artifacts (workflow)
         uses: actions/upload-artifact@v6
         with:
           name: archlinux-gaokun3-image
           path: |
-            ${{ env.ARTIFACT_DIR }}/*
+            ${{ steps.package.outputs.artifact_dir }}/${{ steps.package.outputs.package_glob }}
 
       - name: Publish image release
         uses: softprops/action-gh-release@v2.6.1
         with:
-          tag_name: ${{ steps.release_meta.outputs.tag_name }}
-          body_path: ${{ env.ARTIFACT_DIR }}/release-body.md
+          tag_name: ${{ steps.package.outputs.tag_name }}
+          name: Arch Linux ARM - gaokun3 - ${{ steps.package.outputs.kernel_release }}
+          body_path: ${{ steps.package.outputs.artifact_dir }}/${{ steps.package.outputs.release_body_file }}
           prerelease: false
           make_latest: false
           append_body: false
           overwrite_files: true
           files: |
-            ${{ env.ARTIFACT_DIR }}/*.zst*
+            ${{ steps.package.outputs.artifact_dir }}/${{ steps.package.outputs.package_glob }}
