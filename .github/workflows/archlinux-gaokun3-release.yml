@@ -6,7 +6,7 @@ on:
       arch_mirror_url:
         description: Arch Linux ARM mirror base URL
         required: true
-        default: "https://mirror.archlinuxarm.org"
+        default: "http://tw.mirror.archlinuxarm.org"
       kernel_tag:
         description: Linux kernel tag
         required: true
@@ -180,21 +180,28 @@ jobs:
         run: |
           set -euxo pipefail
           ROOTFS_TAR="$WORKDIR/ArchLinuxARM-aarch64-latest.tar.gz"
+          ROOTFS_URL_PATH="/os/ArchLinuxARM-aarch64-latest.tar.gz"
+          PACMAN_DB_URL_PATH="/aarch64/core/core.db"
 
           mirror_candidates=(
             "$ARCH_MIRROR_URL"
-            "https://mirror.archlinuxarm.org"
-            "http://mirror.archlinuxarm.org"
             "http://tw.mirror.archlinuxarm.org"
             "http://eu.mirror.archlinuxarm.org"
             "http://de3.mirror.archlinuxarm.org"
+            "http://mirror.archlinuxarm.org"
           )
 
           selected_mirror=""
           for mirror in "${mirror_candidates[@]}"; do
             mirror="${mirror%/}"
+
+            if ! curl -fsSI --connect-timeout 10 --retry 3 --retry-all-errors \
+              "$mirror$PACMAN_DB_URL_PATH" >/dev/null; then
+              continue
+            fi
+
             if curl -fsSL --connect-timeout 10 --retry 3 --retry-all-errors \
-              "$mirror/os/ArchLinuxARM-aarch64-latest.tar.gz" -o "$ROOTFS_TAR"; then
+              "$mirror$ROOTFS_URL_PATH" -o "$ROOTFS_TAR"; then
               selected_mirror="$mirror"
               break
             fi
@@ -211,7 +218,11 @@ jobs:
           Server = ${selected_mirror}/\$arch/\$repo
           EOF
 
-          sudo cp /etc/resolv.conf "$ROOTFS_DIR/etc/resolv.conf"
+          sudo tee "$ROOTFS_DIR/etc/resolv.conf" >/dev/null <<EOF
+          nameserver 1.1.1.1
+          nameserver 8.8.8.8
+          options timeout:1 attempts:3
+          EOF
           sudo mount --bind /dev "$ROOTFS_DIR/dev"
           sudo mount --bind /dev/pts "$ROOTFS_DIR/dev/pts"
           sudo mount -t proc proc "$ROOTFS_DIR/proc"
