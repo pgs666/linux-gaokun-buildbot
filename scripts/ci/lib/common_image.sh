@@ -25,6 +25,8 @@ install_common_image_assets() {
     "tools/touchscreen-tuner/tune.py:${touchscreen_share_dir}/tune.py"
     "tools/touchscreen-tuner/tune-icon.svg:${touchscreen_share_dir}/tune-icon.svg"
     "tools/touchscreen-tuner/gaokun-touchscreen-tuner.desktop:/usr/share/applications/gaokun-touchscreen-tuner.desktop"
+  )
+  local optional_data_assets=(
     "tools/image-assets/usr/local/share/gaokun/monitors.xml:/usr/local/share/gaokun/monitors.xml"
   )
   local asset src dest
@@ -65,6 +67,14 @@ install_common_image_assets() {
     src="${asset%%:*}"
     dest="${asset#*:}"
     sudo install -Dm644 "$gaokun_dir/$src" "$rootfs_dir$dest"
+  done
+
+  for asset in "${optional_data_assets[@]}"; do
+    src="${asset%%:*}"
+    dest="${asset#*:}"
+    if [[ -f "$gaokun_dir/$src" ]]; then
+      sudo install -Dm644 "$gaokun_dir/$src" "$rootfs_dir$dest"
+    fi
   done
 
   sudo ln -sfn gaokun-touchscreen-tuner "$rootfs_dir/usr/local/bin/touchscreen-tune"

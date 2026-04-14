@@ -92,8 +92,10 @@ Language=zh_CN.UTF-8
 SystemAccount=true
 EOF
 
-install -d -m 0755 /home/user/.config
-install -Dm644 /usr/local/share/gaokun/monitors.xml /home/user/.config/monitors.xml
+if [[ -f /usr/local/share/gaokun/monitors.xml ]]; then
+  install -d -m 0755 /home/user/.config
+  install -Dm644 /usr/local/share/gaokun/monitors.xml /home/user/.config/monitors.xml
+fi
 chown -R user:user /home/user
 
 install -d -m 1777 -o root -g root /tmp/.X11-unix

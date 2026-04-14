@@ -107,9 +107,11 @@ SystemAccount=true
 EOF
 fi
 
-install -d -m 0755 /home/user/.config
-install -Dm644 /usr/local/share/gaokun/monitors.xml /home/user/.config/monitors.xml
-chown user:user /home/user/.config/monitors.xml
+if [[ -f /usr/local/share/gaokun/monitors.xml ]]; then
+  install -d -m 0755 /home/user/.config
+  install -Dm644 /usr/local/share/gaokun/monitors.xml /home/user/.config/monitors.xml
+  chown user:user /home/user/.config/monitors.xml
+fi
 
 if [[ "$DISPLAY_MANAGER" == "sddm" ]]; then
   install -d -m 0755 /etc/sddm.conf.d
