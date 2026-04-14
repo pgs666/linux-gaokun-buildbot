@@ -318,15 +318,28 @@ jobs:
             rm -f "$WORKDIR/kernel-release-el2.txt"
           fi
 
+          rootfs_pkg_dir="$ROOTFS_DIR/tmp/gaokun-pkgs"
+          sudo rm -rf "$rootfs_pkg_dir"
+          sudo mkdir -p "$rootfs_pkg_dir"
+          for pkg_path in "${pkg_args[@]}"; do
+            sudo cp "$pkg_path" "$rootfs_pkg_dir/"
+          done
+
+          chroot_pkg_args=()
+          for pkg_path in "${pkg_args[@]}"; do
+            chroot_pkg_args+=("/tmp/gaokun-pkgs/$(basename "$pkg_path")")
+          done
+
           sudo mount --bind /dev "$ROOTFS_DIR/dev"
           sudo mount --bind /dev/pts "$ROOTFS_DIR/dev/pts"
           sudo mount -t proc proc "$ROOTFS_DIR/proc"
           sudo mount -t sysfs sys "$ROOTFS_DIR/sys"
           sudo mount -t tmpfs tmpfs "$ROOTFS_DIR/run"
 
-          sudo chroot "$ROOTFS_DIR" /usr/bin/env PKG_ARGS="${pkg_args[*]}" /bin/bash -euxo pipefail <<'EOF'
+          sudo chroot "$ROOTFS_DIR" /usr/bin/env PKG_ARGS="${chroot_pkg_args[*]}" /bin/bash -euxo pipefail <<'EOF'
           read -r -a pkgs <<< "$PKG_ARGS"
           pacman -U --noconfirm "${pkgs[@]}"
+          rm -rf /tmp/gaokun-pkgs
           EOF
 
           trap - EXIT
