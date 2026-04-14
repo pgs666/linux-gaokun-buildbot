@@ -1,77 +1,96 @@
 #!/usr/bin/env python3
-"""Patch BD address in QCA WCN6855 NVM firmware file.
-
-The NVM firmware for the WCN6855 on the Huawei MateBook E Go ships with a
-partially invalid BD address (ad:5a:00:00:00:00). This script generates a
-stable, locally-administered BD address from the device serial number and
-patches it into the NVM file at the correct TLV offset.
-
-Usage:
-    sudo python3 patch-nvm-bdaddr.py
-
-The script will:
-1. Read the device serial from /sys/class/dmi/id/product_serial
-2. Generate a unique BD address via MD5 hash (locally-administered, unicast)
-3. Back up the original NVM file (.orig)
-4. Patch the 6-byte BD address at TLV tag_id=2 (offset 92)
-"""
+"""Patch the generated BDADDR into the QCA WCN6855 NVM firmware."""
 
 import hashlib
 import os
 import shutil
 import struct
 import sys
+from pathlib import Path
 
-NVM_FILE = "/lib/firmware/qca/hpnv21g.b9f"
+NVM_FILES = (
+    Path("/lib/firmware/qca/wcnhpnv21g.bin"),
+    Path("/lib/firmware/qca/hpnv21g.bin"),
+    Path("/lib/firmware/qca/hpnv21g.b9f"),
+)
+SERIAL_PATH = Path("/sys/class/dmi/id/product_serial")
 BD_ADDR_TAG_ID = 2
-TLV_HEADER_SIZE = 4  # __le32 type_len
+TLV_HEADER_SIZE = 4
+ENTRY_HEADER_SIZE = 12
+BD_ADDR_LEN = 6
 
 
 def parse_nvm_find_bdaddr(data):
-    """Parse QCA NVM TLV format and return offset of BD address data."""
-    if len(data) < TLV_HEADER_SIZE + 12:
+    """Return the offset of the BDADDR TLV payload."""
+    if len(data) < TLV_HEADER_SIZE + ENTRY_HEADER_SIZE:
         return None
 
-    type_len = struct.unpack_from('<I', data, 0)[0]
+    type_len = struct.unpack_from("<I", data, 0)[0]
     tlv_type = type_len & 0xFF
     tlv_length = type_len >> 8
-
     offset = TLV_HEADER_SIZE
 
-    # Type 4 = enclosing header, skip to inner
     if tlv_type == 4:
         if len(data) < offset + TLV_HEADER_SIZE:
             return None
-        type_len = struct.unpack_from('<I', data, offset)[0]
+        type_len = struct.unpack_from("<I", data, offset)[0]
         tlv_length = type_len >> 8
         offset += TLV_HEADER_SIZE
 
-    # Parse tlv_type_nvm entries: tag_id(2) + tag_len(2) + reserve1(4) + reserve2(4) + data
     idx = 0
     while idx < tlv_length:
         entry_offset = offset + idx
-        if entry_offset + 12 > len(data):
+        if entry_offset + ENTRY_HEADER_SIZE > len(data):
             break
-        tag_id = struct.unpack_from('<H', data, entry_offset)[0]
-        tag_len = struct.unpack_from('<H', data, entry_offset + 2)[0]
-        data_offset = entry_offset + 12
+
+        tag_id = struct.unpack_from("<H", data, entry_offset)[0]
+        tag_len = struct.unpack_from("<H", data, entry_offset + 2)[0]
+        data_offset = entry_offset + ENTRY_HEADER_SIZE
 
         if data_offset + tag_len > len(data):
             break
-
-        if tag_id == BD_ADDR_TAG_ID and tag_len == 6:
+        if tag_id == BD_ADDR_TAG_ID and tag_len == BD_ADDR_LEN:
             return data_offset
 
-        idx += 12 + tag_len
+        idx += ENTRY_HEADER_SIZE + tag_len
 
     return None
 
 
 def generate_bdaddr(serial):
-    """Generate a locally-administered unicast BD address from a serial string."""
-    h = hashlib.md5(serial.encode()).hexdigest()[:12]
-    first = (int(h[0:2], 16) | 0x02) & 0xFE  # locally-administered, unicast
-    return bytes([first]) + bytes.fromhex(h[2:12])
+    """Generate a locally-administered unicast address from the serial."""
+    digest = hashlib.md5(serial.encode("utf-8")).digest()
+    first = (digest[0] | 0x02) & 0xFE
+    return bytes([first, *digest[1:BD_ADDR_LEN]])
+
+
+def read_serial():
+    try:
+        serial = SERIAL_PATH.read_text(encoding="utf-8").strip()
+    except OSError:
+        return "gaokun3"
+
+    return serial or "gaokun3"
+
+
+def patch_file(path, desired_addr):
+    """Patch one firmware file if the stored address differs."""
+    data = bytearray(path.read_bytes())
+    offset = parse_nvm_find_bdaddr(data)
+    if offset is None:
+        return False
+
+    desired_fw_addr = desired_addr[::-1]
+    if data[offset:offset + BD_ADDR_LEN] == desired_fw_addr:
+        return False
+
+    backup = path.with_name(path.name + ".orig")
+    if not backup.exists():
+        shutil.copy2(path, backup)
+
+    data[offset:offset + BD_ADDR_LEN] = desired_fw_addr
+    path.write_bytes(data)
+    return True
 
 
 def main():
@@ -79,51 +98,14 @@ def main():
         print("Error: must run as root", file=sys.stderr)
         sys.exit(1)
 
-    if not os.path.exists(NVM_FILE):
-        print(f"Error: {NVM_FILE} not found", file=sys.stderr)
+    available_files = [path for path in NVM_FILES if path.exists()]
+    if not available_files:
+        print("Error: no supported QCA NVM files found", file=sys.stderr)
         sys.exit(1)
 
-    # Read device serial
-    try:
-        serial = open("/sys/class/dmi/id/product_serial").read().strip()
-    except (FileNotFoundError, PermissionError):
-        serial = "gaokun3"
-    print(f"Device serial: {serial}")
-
-    # Generate address
-    addr_bytes = generate_bdaddr(serial)
-    addr_str = ":".join(f"{b:02x}" for b in addr_bytes)
-    print(f"Generated BD address: {addr_str}")
-
-    # Read NVM file
-    data = bytearray(open(NVM_FILE, "rb").read())
-    bd_offset = parse_nvm_find_bdaddr(data)
-    if bd_offset is None:
-        print("Error: could not find BD address tag in NVM file", file=sys.stderr)
-        sys.exit(1)
-
-    old_addr = ":".join(f"{b:02x}" for b in data[bd_offset:bd_offset + 6])
-    print(f"Current BD address at offset {bd_offset}: {old_addr}")
-
-    if data[bd_offset:bd_offset + 6] == addr_bytes:
-        print("Already patched, nothing to do.")
-        sys.exit(0)
-
-    # Backup original
-    backup = NVM_FILE + ".orig"
-    if not os.path.exists(backup):
-        shutil.copy2(NVM_FILE, backup)
-        print(f"Backed up original to {backup}")
-
-    # Patch
-    data[bd_offset:bd_offset + 6] = addr_bytes
-    open(NVM_FILE, "wb").write(data)
-
-    # Verify
-    verify = open(NVM_FILE, "rb").read()
-    verify_addr = ":".join(f"{b:02x}" for b in verify[bd_offset:bd_offset + 6])
-    print(f"Patched BD address: {verify_addr}")
-    print("Done. Reboot to apply.")
+    desired_addr = generate_bdaddr(read_serial())
+    for path in available_files:
+        patch_file(path, desired_addr)
 
 
 if __name__ == "__main__":

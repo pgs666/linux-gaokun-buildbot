@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Touchscreen Tune
+Comment=Tune Himax HX83121A touchscreen algorithm parameters
+Exec=/usr/local/bin/touchscreen-tune
+Icon=/usr/local/lib/gaokun-touchscreen-tuner/tune-icon.svg
+Terminal=false
+Categories=Settings;HardwareSettings;
+StartupNotify=true

@@ -107,21 +107,7 @@ el2_state() {
         return 0
     fi
 
-    if git -C "$KERN_SRC" apply --check "$GAOKUN_DIR"/patches/el2/*.patch >/dev/null 2>&1; then
-        printf 'standard\n'
-        return 0
-    fi
-
-    printf 'unknown\n'
-}
-
-require_clean_source_tree() {
-    if ! git -C "$KERN_SRC" diff --quiet --ignore-submodules -- || \
-       ! git -C "$KERN_SRC" diff --cached --quiet --ignore-submodules --; then
-        echo "Source tree has uncommitted changes. Refusing to mutate it automatically." >&2
-        echo "Please commit, stash, or discard local changes before using this helper to switch kernel modes." >&2
-        exit 1
-    fi
+    printf 'standard\n'
 }
 
 ensure_ubuntu_initramfs_firmware_hook() {
@@ -164,7 +150,6 @@ build_kernel() {
         echo -e "\n=== Preparing Source Tree for EL2 Kernel ==="
         case "$current_state" in
             standard)
-                require_clean_source_tree
                 echo "Applying EL2 patches to source tree..."
                 git apply --index "$GAOKUN_DIR"/patches/el2/*.patch
                 git commit -m "Apply EL2 patches"
@@ -189,7 +174,6 @@ build_kernel() {
         echo -e "\n=== Preparing Source Tree for Standard Kernel ==="
         case "$current_state" in
             el2)
-                require_clean_source_tree
                 echo "Reverting EL2 patches to restore standard source tree..."
                 git reset --hard HEAD~1
                 ;;

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+. "$(dirname "$0")/lib/common_image.sh"
+
 : "${GAOKUN_DIR:?missing GAOKUN_DIR}"
 : "${WORKDIR:?missing WORKDIR}"
 : "${ROOTFS_DIR:?missing ROOTFS_DIR}"
@@ -10,16 +12,9 @@ set -euo pipefail
 : "${UBUNTU_RELEASE:?missing UBUNTU_RELEASE}"
 
 BUILD_EL2="${BUILD_EL2:-false}"
-DISTRO_HOSTNAME="${DISTRO_HOSTNAME:-ubuntu}"
-DISPLAY_MANAGER="${DISPLAY_MANAGER:-gdm}"
-DESKTOP_PROFILE="${DESKTOP_PROFILE:-gnome}"
 KREL="$(cat "$WORKDIR/kernel-release.txt")"
 KREL_EL2=""
-if [[ "$BUILD_EL2" == "true" ]]; then
-  if [[ ! -f "$WORKDIR/kernel-release-el2.txt" ]]; then
-    echo "BUILD_EL2=true but $WORKDIR/kernel-release-el2.txt is missing" >&2
-    exit 1
-  fi
+if [[ "$BUILD_EL2" == "true" && -f "$WORKDIR/kernel-release-el2.txt" ]]; then
   KREL_EL2="$(cat "$WORKDIR/kernel-release-el2.txt")"
 fi
 
@@ -57,6 +52,7 @@ sudo mkdir -p "$MNT/boot/efi"
 sudo mount "${LOOP}p1" "$MNT/boot/efi"
 
 sudo rsync -aHAX --exclude='/proc/*' --exclude='/sys/*' --exclude='/dev/*' --exclude='/run/*' "$ROOTFS_DIR/" "$MNT/"
+install_common_image_assets "$MNT" "$GAOKUN_DIR"
 
 sudo tee "$MNT/etc/fstab" >/dev/null <<EOF
 UUID=${ROOT_UUID}  /         ext4   errors=remount-ro,noatime  0  1
@@ -69,8 +65,8 @@ sudo mount -t proc proc "$MNT/proc"
 sudo mount -t sysfs sys "$MNT/sys"
 sudo mount -t tmpfs tmpfs "$MNT/run"
 
-sudo chroot "$MNT" /usr/bin/env KREL="$KREL" KREL_EL2="$KREL_EL2" BUILD_EL2="$BUILD_EL2" ROOT_UUID="$ROOT_UUID" DISPLAY_MANAGER="$DISPLAY_MANAGER" DESKTOP_PROFILE="$DESKTOP_PROFILE" DISTRO_HOSTNAME="$DISTRO_HOSTNAME" /bin/bash -euxo pipefail <<'CHROOT_EOF'
-echo "$DISTRO_HOSTNAME" > /etc/hostname
+sudo chroot "$MNT" /usr/bin/env KREL="$KREL" KREL_EL2="$KREL_EL2" BUILD_EL2="$BUILD_EL2" ROOT_UUID="$ROOT_UUID" /bin/bash -euxo pipefail <<'CHROOT_EOF'
+echo "ubuntu" > /etc/hostname
 id -u user >/dev/null 2>&1 || useradd -m -s /bin/bash -G sudo user
 echo "user:user" | chpasswd
 mkdir -p /etc/sudoers.d
@@ -90,92 +86,14 @@ cat > /var/lib/AccountsService/users/user <<'EOF'
 [User]
 Language=zh_CN.UTF-8
 EOF
-if [[ "$DISPLAY_MANAGER" == "gdm" ]]; then
 cat > /var/lib/AccountsService/users/gdm <<'EOF'
 [User]
 Language=zh_CN.UTF-8
 SystemAccount=true
 EOF
-fi
 
-mkdir -p /home/user/.config
-if [[ "$DESKTOP_PROFILE" == "kde" ]]; then
-cat > /home/user/.config/kwinoutputconfig.json <<'EOF'
-[
-  {
-    "name": "outputs",
-    "data": [
-      {
-        "autoRotation": "InTabletMode",
-        "connectorName": "DSI-1",
-        "mode": {
-          "height": 2560,
-          "refreshRate": 120000,
-          "width": 1600
-        },
-        "scale": 1.5,
-        "transform": "Rotated270"
-      }
-    ]
-  },
-  {
-    "name": "setups",
-    "data": [
-      {
-        "lidClosed": false,
-        "outputs": [
-          {
-            "enabled": true,
-            "outputIndex": 0,
-            "position": {
-              "x": 0,
-              "y": 0
-            },
-            "priority": 1,
-            "replicationSource": ""
-          }
-        ]
-      }
-    ]
-  }
-]
-EOF
-cat > /home/user/.config/kcminputrc <<'EOF'
-[Mouse]
-cursorTheme=breeze_cursors
-EOF
-else
-cat > /home/user/.config/monitors.xml <<'EOF'
-<monitors version="2">
-    <configuration>
-        <layoutmode>logical</layoutmode>
-        <logicalmonitor>
-            <x>0</x>
-            <y>0</y>
-            <scale>1.6666666269302368</scale>
-            <primary>yes</primary>
-            <transform>
-                <rotation>right</rotation>
-                <flipped>no</flipped>
-            </transform>
-            <monitor>
-                <monitorspec>
-                    <connector>DSI-1</connector>
-                    <vendor>unknown</vendor>
-                    <product>unknown</product>
-                    <serial>unknown</serial>
-                </monitorspec>
-                <mode>
-                    <width>1600</width>
-                    <height>2560</height>
-                    <rate>60.000</rate>
-                </mode>
-            </monitor>
-        </logicalmonitor>
-    </configuration>
-</monitors>
-EOF
-fi
+install -d -m 0755 /home/user/.config
+install -Dm644 /usr/local/share/gaokun/monitors.xml /home/user/.config/monitors.xml
 chown -R user:user /home/user
 
 install -d -m 1777 -o root -g root /tmp/.X11-unix
@@ -183,8 +101,8 @@ install -d -m 1777 -o root -g root /tmp/.X11-unix
 cat > /etc/systemd/system/gaokun-fix-x11-unix.service <<'EOF'
 [Unit]
 Description=Fix /tmp/.X11-unix ownership for Xwayland
-After=display-manager.service
-Wants=display-manager.service
+After=gdm.service
+Wants=gdm.service
 
 [Service]
 Type=oneshot
@@ -194,27 +112,9 @@ ExecStart=/bin/sh -c 'mkdir -p /tmp/.X11-unix && chown root:root /tmp/.X11-unix 
 WantedBy=graphical.target
 EOF
 
-enable_units=(
-  "$DISPLAY_MANAGER"
-  NetworkManager
-  ssh
-  huawei-touchpad.service
-  gaokun-fix-x11-unix.service
-)
-if [[ "$DISPLAY_MANAGER" == "gdm" ]]; then
-  enable_units+=(gdm-monitor-sync.service)
-fi
-systemctl enable "${enable_units[@]}" || true
-
-mkdir -p /etc/modules-load.d
-echo -e "pci-pwrctrl-pwrseq\nath11k_pci" > /etc/modules-load.d/wifi.conf
-echo "btqca" > /etc/modules-load.d/bluetooth.conf
-echo -e "panel-himax-hx83121a\nhimax_hx83121a_spi\nmsm\nhid_multitouch" > /etc/modules-load.d/display.conf
-echo -e "lpasscc_sc8280xp\nsnd-soc-sc8280xp" > /etc/modules-load.d/audio.conf
-echo -e "huawei-gaokun-ec\nhuawei-gaokun-battery\nucsi_huawei_gaokun" > /etc/modules-load.d/battery.conf
-
-mkdir -p /etc/modprobe.d
-echo "softdep pinctrl_sc8280xp_lpass_lpi pre: lpasscc_sc8280xp" > /etc/modprobe.d/audio-deps.conf
+systemctl enable gdm NetworkManager ssh huawei-touchpad.service \
+  gaokun-fix-x11-unix.service gdm-monitor-sync.service \
+  patch-nvm-bdaddr.service || true
 
 cat >> /etc/initramfs-tools/modules <<'MODEOF'
 # Storage and USB
@@ -258,7 +158,7 @@ layout=bls
 EOF
 
 cat > /etc/kernel/cmdline <<EOF
-root=UUID=$ROOT_UUID clk_ignore_unused pd_ignore_unused arm64.nopauth iommu.passthrough=0 iommu.strict=0 pcie_aspm.policy=powersupersave modprobe.blacklist=simpledrm efi=noruntime fbcon=rotate:1 usbhid.quirks=0x12d1:0x10b8:0x20000000 consoleblank=0 loglevel=4 psi=1 video=DSI-1:panel_orientation=right_side_up
+root=UUID=$ROOT_UUID clk_ignore_unused pd_ignore_unused arm64.nopauth iommu.passthrough=0 iommu.strict=0 pcie_aspm.policy=powersupersave modprobe.blacklist=simpledrm efi=noruntime fbcon=rotate:1 usbhid.quirks=0x12d1:0x10b8:0x20000000 consoleblank=0 loglevel=4 psi=1
 EOF
 
 cat > /etc/kernel/devicetree <<'EOF'
@@ -332,32 +232,8 @@ editor no
 EOF
 CHROOT_EOF
 
-sudo install -Dm0755 "$GAOKUN_DIR/tools/touchscreen-tuner/gaokun-touchscreen-tuner" \
-  "$MNT/usr/local/bin/gaokun-touchscreen-tuner"
-sudo install -Dm0644 "$GAOKUN_DIR/tools/touchscreen-tuner/tune.py" \
-  "$MNT/usr/local/share/gaokun-touchscreen-tuner/tune.py"
-sudo install -Dm0644 "$GAOKUN_DIR/tools/touchscreen-tuner/gaokun-touchscreen-tuner.desktop" \
-  "$MNT/usr/local/share/applications/gaokun-touchscreen-tuner.desktop"
-sudo install -Dm0644 "$GAOKUN_DIR/tools/mpv/mpv.conf" \
-  "$MNT/etc/skel/.config/mpv/mpv.conf"
-sudo install -Dm0644 "$GAOKUN_DIR/tools/mpv/mpv.conf" \
-  "$MNT/home/user/.config/mpv/mpv.conf"
-sudo chroot "$MNT" chown -R user:user /home/user/.config/mpv
-
 if [[ "$BUILD_EL2" == "true" && -n "$KREL_EL2" ]]; then
-  sudo mkdir -p "$MNT/boot/efi/EFI/systemd/drivers" "$MNT/boot/efi/firmware"
-  sudo install -Dm644 "$GAOKUN_DIR/tools/el2/slbounceaa64.efi" \
-    "$MNT/boot/efi/EFI/systemd/drivers/slbounceaa64.efi"
-  sudo install -Dm644 "$GAOKUN_DIR/tools/el2/qebspilaa64.efi" \
-    "$MNT/boot/efi/EFI/systemd/drivers/qebspilaa64.efi"
-  sudo install -Dm644 "$GAOKUN_DIR/tools/el2/tcblaunch.exe" \
-    "$MNT/boot/efi/tcblaunch.exe"
-  sudo install -Dm644 "$MNT/lib/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcadsp8280.mbn" \
-    "$MNT/boot/efi/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcadsp8280.mbn"
-  sudo install -Dm644 "$MNT/lib/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qccdsp8280.mbn" \
-    "$MNT/boot/efi/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qccdsp8280.mbn"
-  sudo install -Dm644 "$MNT/lib/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcslpi8280.mbn" \
-    "$MNT/boot/efi/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcslpi8280.mbn"
+  install_el2_efi_payloads "$MNT" "$GAOKUN_DIR"
 fi
 
 sync

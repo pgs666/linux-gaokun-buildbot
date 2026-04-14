@@ -1,0 +1,14 @@
+[Unit]
+Description=Patch QCA Bluetooth NVM BDADDR
+DefaultDependencies=no
+After=local-fs.target
+Before=bluetooth.service
+ConditionPathExists=/usr/local/bin/patch-nvm-bdaddr.py
+ConditionPathExists=/lib/firmware/qca/wcnhpnv21g.bin
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/patch-nvm-bdaddr.py
+
+[Install]
+WantedBy=multi-user.target
