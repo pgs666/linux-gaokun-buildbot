@@ -112,6 +112,7 @@ jobs:
           path: |
             ${{ env.ARTIFACT_DIR }}/*.pkg.tar.zst
             ${{ env.ARTIFACT_DIR }}/package-manifest.json
+            ${{ env.ARTIFACT_DIR }}/package-sha256sums.txt
             ${{ env.ARTIFACT_DIR }}/package-release-body.md
 
       - name: Publish package release
@@ -127,3 +128,4 @@ jobs:
           files: |
             ${{ env.ARTIFACT_DIR }}/*.pkg.tar.zst
             ${{ env.ARTIFACT_DIR }}/package-manifest.json
+            ${{ env.ARTIFACT_DIR }}/package-sha256sums.txt

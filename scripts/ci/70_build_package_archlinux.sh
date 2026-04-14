@@ -295,6 +295,11 @@ cat >"$ARTIFACT_DIR/package-manifest.json" <<EOF
 }
 EOF
 
+(
+  cd "$ARTIFACT_DIR"
+  sha256sum ./*.pkg.tar.zst package-manifest.json > package-sha256sums.txt
+)
+
 cat >"$ARTIFACT_DIR/package-release-body.md" <<EOF
 ## Package Bundle
 
@@ -304,6 +309,10 @@ cat >"$ARTIFACT_DIR/package-release-body.md" <<EOF
 - Firmware Version: \`${FIRMWARE_PKGVER}\`
 - Architecture: \`aarch64\`
 - Build Time (UTC): \`${BUILD_TIME_UTC}\`
+
+## Integrity
+
+- SHA256 checksum list: \`package-sha256sums.txt\`
 
 ## Included Arch Packages
 

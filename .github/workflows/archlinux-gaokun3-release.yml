@@ -137,6 +137,16 @@ jobs:
             -o "$PACKAGE_PKGS_DIR/$asset_name"
 
           manifest_path="$PACKAGE_PKGS_DIR/package-manifest.json"
+
+          checksum_asset_name="package-sha256sums.txt"
+          checksum_asset_url="$(jq -r --arg name "$checksum_asset_name" '.assets[] | select(.name == $name) | .url' "$release_json")"
+          if [[ -n "$checksum_asset_url" && "$checksum_asset_url" != "null" ]]; then
+            curl -fsSL \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H "Accept: application/octet-stream" \
+              "$checksum_asset_url" \
+              -o "$PACKAGE_PKGS_DIR/$checksum_asset_name"
+          fi
           manifest_kernel_tag="$(jq -r '.kernel_tag' "$manifest_path")"
           manifest_build_el2="$(jq -r '.build_el2' "$manifest_path")"
 
@@ -175,6 +185,10 @@ jobs:
               "$asset_url" \
               -o "$PACKAGE_PKGS_DIR/$asset_name"
           done
+
+          if [[ -f "$PACKAGE_PKGS_DIR/package-sha256sums.txt" ]]; then
+            (cd "$PACKAGE_PKGS_DIR" && sha256sum -c package-sha256sums.txt)
+          fi
 
       - name: Bootstrap Arch Linux ARM rootfs
         run: |
