@@ -1,0 +1,15 @@
+pkgname=@PKG_NAME@
+pkgver=@PKGVER@
+pkgrel=1
+pkgdesc="@PKG_DESC@"
+arch=('aarch64')
+url="https://github.com/KawaiiHachimi/linux-gaokun-buildbot"
+license=('GPL2')
+depends=(@DEPENDS@)
+options=(!strip)
+source=("@SOURCE_NAME@")
+sha256sums=('SKIP')
+
+package() {
+  cp -a "$srcdir/payload/." "$pkgdir"/
+}
