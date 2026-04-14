@@ -193,6 +193,15 @@ jobs:
       - name: Bootstrap Arch Linux ARM rootfs
         run: |
           set -euxo pipefail
+          cleanup_mounts() {
+            for mp in "$ROOTFS_DIR/dev/pts" "$ROOTFS_DIR/dev" "$ROOTFS_DIR/proc" "$ROOTFS_DIR/sys" "$ROOTFS_DIR/run"; do
+              if mountpoint -q "$mp"; then
+                sudo umount "$mp" || sudo umount -l "$mp" || true
+              fi
+            done
+          }
+          trap cleanup_mounts EXIT
+
           ROOTFS_TAR="$WORKDIR/ArchLinuxARM-aarch64-latest.tar.gz"
           ROOTFS_URL_PATH="/os/ArchLinuxARM-aarch64-latest.tar.gz"
           PACMAN_DB_URL_PATH="/aarch64/core/core.db"
@@ -268,15 +277,21 @@ jobs:
             ${EXTRA_PACKAGES}
           EOF
 
-          sudo umount "$ROOTFS_DIR/dev/pts"
-          sudo umount "$ROOTFS_DIR/dev"
-          sudo umount "$ROOTFS_DIR/proc"
-          sudo umount "$ROOTFS_DIR/sys"
-          sudo umount "$ROOTFS_DIR/run"
+          trap - EXIT
+          cleanup_mounts
 
       - name: Install gaokun Arch packages into rootfs
         run: |
           set -euxo pipefail
+          cleanup_mounts() {
+            for mp in "$ROOTFS_DIR/dev/pts" "$ROOTFS_DIR/dev" "$ROOTFS_DIR/proc" "$ROOTFS_DIR/sys" "$ROOTFS_DIR/run"; do
+              if mountpoint -q "$mp"; then
+                sudo umount "$mp" || sudo umount -l "$mp" || true
+              fi
+            done
+          }
+          trap cleanup_mounts EXIT
+
           manifest_path="$PACKAGE_PKGS_DIR/package-manifest.json"
           manifest_kernel_release="$(jq -r '.kernels.standard.release' "$manifest_path")"
           kernel_pkg_name="$(jq -r '.kernels.standard.packages.kernel' "$manifest_path")"
@@ -314,11 +329,8 @@ jobs:
           pacman -U --noconfirm "${pkgs[@]}"
           EOF
 
-          sudo umount "$ROOTFS_DIR/dev/pts"
-          sudo umount "$ROOTFS_DIR/dev"
-          sudo umount "$ROOTFS_DIR/proc"
-          sudo umount "$ROOTFS_DIR/sys"
-          sudo umount "$ROOTFS_DIR/run"
+          trap - EXIT
+          cleanup_mounts
 
       - name: Create bootable image
         run: |
