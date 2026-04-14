@@ -4,6 +4,11 @@ set -euo pipefail
 install_common_image_assets() {
   local rootfs_dir="$1"
   local gaokun_dir="$2"
+  local directory_assets=(
+    "tools/image-assets/etc/modules-load.d:/etc/modules-load.d"
+    "tools/image-assets/etc/modprobe.d:/etc/modprobe.d"
+    "tools/image-assets/etc/sddm.conf.d:/etc/sddm.conf.d"
+  )
   local executable_assets=(
     "tools/bluetooth/patch-nvm-bdaddr.py:/usr/local/bin/patch-nvm-bdaddr.py"
     "tools/monitors/gdm-monitor-sync:/usr/local/bin/gdm-monitor-sync"
@@ -26,16 +31,21 @@ install_common_image_assets() {
   sudo mkdir -p \
     "$rootfs_dir/etc/modules-load.d" \
     "$rootfs_dir/etc/modprobe.d" \
+    "$rootfs_dir/etc/sddm.conf.d" \
     "$rootfs_dir/etc/systemd/system" \
     "$rootfs_dir/usr/local/bin" \
     "$rootfs_dir/usr/local/lib/gaokun-touchscreen-tuner" \
     "$rootfs_dir/usr/share/applications" \
     "$rootfs_dir/usr/local/share/gaokun"
 
-  sudo cp -a "$gaokun_dir/tools/image-assets/etc/modules-load.d/." \
-    "$rootfs_dir/etc/modules-load.d/"
-  sudo cp -a "$gaokun_dir/tools/image-assets/etc/modprobe.d/." \
-    "$rootfs_dir/etc/modprobe.d/"
+  for asset in "${directory_assets[@]}"; do
+    src="${asset%%:*}"
+    dest="${asset#*:}"
+    if [[ -d "$gaokun_dir/$src" ]]; then
+      sudo mkdir -p "$rootfs_dir$dest"
+      sudo cp -a "$gaokun_dir/$src/." "$rootfs_dir$dest/"
+    fi
+  done
 
   for asset in "${executable_assets[@]}"; do
     src="${asset%%:*}"

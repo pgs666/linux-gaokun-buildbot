@@ -111,6 +111,38 @@ install -d -m 0755 /home/user/.config
 install -Dm644 /usr/local/share/gaokun/monitors.xml /home/user/.config/monitors.xml
 chown user:user /home/user/.config/monitors.xml
 
+if [[ "$DISPLAY_MANAGER" == "sddm" ]]; then
+  install -d -m 0755 /etc/sddm.conf.d
+  cat > /etc/sddm.conf.d/10-wayland-default-session.conf <<'EOF'
+[General]
+DisplayServer=wayland
+
+[Users]
+RememberLastSession=true
+RememberLastUser=true
+EOF
+
+  sddm_wayland_session=""
+  for candidate in plasmawayland.desktop plasma.desktop startplasma-wayland.desktop; do
+    if [[ -f "/usr/share/wayland-sessions/$candidate" ]]; then
+      sddm_wayland_session="$candidate"
+      break
+    fi
+  done
+
+  if [[ -n "$sddm_wayland_session" ]] && id -u sddm >/dev/null 2>&1; then
+    install -d -o sddm -g sddm -m 0755 /var/lib/sddm
+    cat > /tmp/gaokun-sddm-state.conf <<'EOF'
+[Last]
+Session=__WAYLAND_SESSION__
+User=user
+EOF
+    sed -i "s/__WAYLAND_SESSION__/$sddm_wayland_session/" /tmp/gaokun-sddm-state.conf
+    install -o sddm -g sddm -m 0644 /tmp/gaokun-sddm-state.conf /var/lib/sddm/state.conf
+    rm -f /tmp/gaokun-sddm-state.conf
+  fi
+fi
+
 enable_units=(
   "$DISPLAY_MANAGER"
   NetworkManager
