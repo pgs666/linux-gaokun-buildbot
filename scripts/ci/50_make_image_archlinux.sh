@@ -62,7 +62,7 @@ sudo mount -o subvol=@var "${LOOP}p2" "$MNT/var"
 sudo mkdir -p "$MNT/boot/efi"
 sudo mount "${LOOP}p1" "$MNT/boot/efi"
 
-sudo rsync -aHAX "$ROOTFS_DIR/" "$MNT/"
+sudo rsync -aHAX --exclude='/var/cache/pacman/pkg/*' "$ROOTFS_DIR/" "$MNT/"
 install_common_image_assets "$MNT" "$GAOKUN_DIR"
 
 sudo tee "$MNT/etc/fstab" >/dev/null <<EOF

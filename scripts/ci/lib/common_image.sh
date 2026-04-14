@@ -25,6 +25,7 @@ install_common_image_assets() {
     "tools/touchscreen-tuner/tune.py:${touchscreen_share_dir}/tune.py"
     "tools/touchscreen-tuner/tune-icon.svg:${touchscreen_share_dir}/tune-icon.svg"
     "tools/touchscreen-tuner/gaokun-touchscreen-tuner.desktop:/usr/share/applications/gaokun-touchscreen-tuner.desktop"
+    "tools/audio/sc8280xp.conf:/usr/share/alsa/ucm2/Qualcomm/sc8280xp/sc8280xp.conf"
   )
   local optional_data_assets=(
     "tools/image-assets/usr/local/share/gaokun/monitors.xml:/usr/local/share/gaokun/monitors.xml"
@@ -40,6 +41,7 @@ install_common_image_assets() {
     "$rootfs_dir${touchscreen_share_dir}" \
     "$rootfs_dir/usr/local/lib" \
     "$rootfs_dir/usr/share/applications" \
+    "$rootfs_dir/usr/share/alsa/ucm2/Qualcomm/sc8280xp" \
     "$rootfs_dir/usr/local/share/gaokun"
 
   for asset in "${directory_assets[@]}"; do
