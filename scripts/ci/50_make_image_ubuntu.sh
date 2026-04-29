@@ -201,9 +201,9 @@ EOF
   printf '%s\n' "$cmdline" > "$conf_root/cmdline"
   printf 'qcom/%s\n' "$dtb" > "$conf_root/devicetree"
 
-  kernel-install --entry-token=machine-id remove "$krel" || true
+  kernel-install --esp-path=/boot/efi --entry-token=machine-id remove "$krel" || true
   KERNEL_INSTALL_CONF_ROOT="$conf_root" \
-    kernel-install --verbose --make-entry-directory=yes --entry-token=machine-id add \
+    kernel-install --esp-path=/boot/efi --verbose --make-entry-directory=yes --entry-token=machine-id add \
     "$krel" "$image" "$initrd"
   rm -rf "$conf_root"
 }

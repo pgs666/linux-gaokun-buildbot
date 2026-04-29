@@ -1,7 +1,7 @@
 From 752d9c9b19fb89760fab8efaa1a2bbb45a09f8ee Mon Sep 17 00:00:00 2001
 From: Pengyu Luo <mitltlatltl@gmail.com>
 Date: Fri, 3 Apr 2026 19:53:54 +0800
-Subject: [PATCH 09/16] arm64: dts: qcom: sc8280xp: Add ADSP FastRPC node
+Subject: [PATCH 04/16] arm64: dts: qcom: sc8280xp: Add ADSP FastRPC node
 
 Add the FastRPC node to enable offloading compute tasks to the ADSP
 via the FastRPC framework.

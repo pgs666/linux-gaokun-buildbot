@@ -1,7 +1,7 @@
 From 530419082243a42c8f5324ddfdf9424ce2371969 Mon Sep 17 00:00:00 2001
 From: Pengyu Luo <mitltlatltl@gmail.com>
 Date: Tue, 3 Mar 2026 22:34:22 +0800
-Subject: [PATCH 04/16] clk: qcom: dispcc-sc8280xp: Don't park mdp_clk_src at
+Subject: [PATCH 02/16] clk: qcom: dispcc-sc8280xp: Don't park mdp_clk_src at
  registration time
 
 Parking disp{0,1}_cc_mdss_mdp_clk_src clk broke simplefb on HUAWEI

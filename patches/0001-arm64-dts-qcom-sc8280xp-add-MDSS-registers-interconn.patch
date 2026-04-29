@@ -1,7 +1,7 @@
 From 6929f465e249a846c6f901ebecf5fe2b8a6006e3 Mon Sep 17 00:00:00 2001
 From: nuvole <mitltlatltl@gmail.com>
 Date: Mon, 14 Oct 2024 16:17:28 +0800
-Subject: [PATCH 02/16] arm64: dts: qcom: sc8280xp: add MDSS registers
+Subject: [PATCH 01/16] arm64: dts: qcom: sc8280xp: add MDSS registers
  interconnect
 
 ---

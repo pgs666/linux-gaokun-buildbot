@@ -1,7 +1,7 @@
 From 838b28f4a1f66bf37c73d5d2203c4750395a81a7 Mon Sep 17 00:00:00 2001
 From: Lewis White <whitelewis@gaokun3>
 Date: Sun, 8 Feb 2026 00:00:00 +0800
-Subject: [PATCH 10/16] Bluetooth: btqca: only set USE_BDADDR_PROPERTY when
+Subject: [PATCH 05/16] Bluetooth: btqca: only set USE_BDADDR_PROPERTY when
  address is all-zero
 
 qca_check_bdaddr() currently sets HCI_QUIRK_USE_BDADDR_PROPERTY whenever

@@ -159,7 +159,7 @@ systemctl enable "${enable_units[@]}" || true
 
 mkdir -p /etc/initcpio/install /etc/initcpio/hooks
 cat > /etc/initcpio/install/gaokun3-firmware <<'EOF'
-build() {
+install() {
   add_file /usr/lib/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcadsp8280.mbn
   add_file /usr/lib/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qccdsp8280.mbn
   add_file /usr/lib/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcslpi8280.mbn
@@ -207,9 +207,9 @@ EOF
   printf '%s\n' "$(cat /etc/kernel/cmdline)" > "$conf_root/cmdline"
   printf 'qcom/%s\n' "$dtb" > "$conf_root/devicetree"
 
-  kernel-install --entry-token=machine-id remove "$krel" || true
+  kernel-install --esp-path=/boot/efi --entry-token=machine-id remove "$krel" || true
   KERNEL_INSTALL_CONF_ROOT="$conf_root" \
-    kernel-install --verbose --make-entry-directory=yes --entry-token=machine-id add \
+    kernel-install --esp-path=/boot/efi --verbose --make-entry-directory=yes --entry-token=machine-id add \
     "$krel" "/usr/lib/modules/$krel/vmlinuz" "$initramfs"
   rm -rf "$conf_root"
 }

@@ -1,7 +1,7 @@
 From 1e1d234b37badac7165d20f8103e942aabfdcada Mon Sep 17 00:00:00 2001
 From: Lewis <lewis@matebook-e-go-linux>
 Date: Mon, 9 Feb 2026 00:00:00 +0800
-Subject: [PATCH 08/16] platform/arm64: huawei-gaokun-ec: fix suspend/resume
+Subject: [PATCH 03/16] platform/arm64: huawei-gaokun-ec: fix suspend/resume
  ordering
 
 Use SYSTEM_SLEEP_PM_OPS instead of NOIRQ_SYSTEM_SLEEP_PM_OPS for the

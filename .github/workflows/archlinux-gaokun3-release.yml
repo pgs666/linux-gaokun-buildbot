@@ -10,7 +10,7 @@ on:
       kernel_tag:
         description: Linux kernel tag
         required: true
-        default: "v7.0"
+        default: "v7.1-rc1"
       desktop_environment:
         description: Desktop environment package group
         required: true

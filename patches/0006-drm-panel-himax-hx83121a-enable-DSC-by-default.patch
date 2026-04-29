@@ -1,7 +1,7 @@
 From 1ad2b093889c3e39becf78bb615ad710b70219e4 Mon Sep 17 00:00:00 2001
 From: cool <bilibili@att.net>
 Date: Fri, 20 Mar 2026 16:46:00 +0800
-Subject: [PATCH 11/16] drm/panel: himax-hx83121a: enable DSC by default
+Subject: [PATCH 06/16] drm/panel: himax-hx83121a: enable DSC by default
 
 ---
  drivers/gpu/drm/panel/panel-himax-hx83121a.c | 4 ++--

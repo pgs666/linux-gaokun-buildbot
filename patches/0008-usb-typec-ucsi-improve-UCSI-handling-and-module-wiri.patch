@@ -1,7 +1,7 @@
 From b1815492e049dfdc237ea66e2dc6db34e359b706 Mon Sep 17 00:00:00 2001
 From: local-build <local-build@localhost>
 Date: Sat, 4 Apr 2026 23:41:26 +0800
-Subject: [PATCH 13/16] usb/typec/ucsi: improve UCSI handling and module wiring
+Subject: [PATCH 08/16] usb/typec/ucsi: improve UCSI handling and module wiring
 
 ---
  drivers/usb/typec/ucsi/ucsi_huawei_gaokun.c | 592 +++++++++++++++++---
