@@ -336,7 +336,7 @@ sudo ln -sf /etc/systemd/system/gaokun-wifi-mac@.service \
     $ROOTFS_DIR/etc/systemd/system/sys-subsystem-net-devices-wlP6p1s0.device.wants/gaokun-wifi-mac@wlP6p1s0.service
 
 # 音频 UCM 配置
-sudo cp $GAOKUN_DIR/tools/audio/sc8280xp.conf \
+sudo cp $GAOKUN_DIR/tools/audio/*.conf \
     $ROOTFS_DIR/usr/share/alsa/ucm2/Qualcomm/sc8280xp/
 
 # 复用 CI 镜像流水线里的共享资源

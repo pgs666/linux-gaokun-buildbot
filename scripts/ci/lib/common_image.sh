@@ -19,6 +19,7 @@ install_common_image_assets() {
   )
   local data_assets=(
     "tools/audio/sc8280xp.conf:/usr/share/alsa/ucm2/Qualcomm/sc8280xp/sc8280xp.conf"
+    "tools/audio/HUAWEI-GAOKUN3.conf:/usr/share/alsa/ucm2/Qualcomm/sc8280xp/HUAWEI-GAOKUN3.conf"
     "tools/wifi/80-gaokun-wifi-mac.rules:/etc/udev/rules.d/80-gaokun-wifi-mac.rules"
     "tools/touchscreen-tuner/tune.py:/usr/local/lib/gaokun-touchscreen-tuner/tune.py"
     "tools/touchscreen-tuner/tune-icon.svg:/usr/local/lib/gaokun-touchscreen-tuner/tune-icon.svg"
