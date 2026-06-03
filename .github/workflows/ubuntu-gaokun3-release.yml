@@ -160,6 +160,7 @@ jobs:
             "$(jq -r '.kernels.standard.packages.image' "$manifest_path")"
             "$(jq -r '.kernels.standard.packages.modules' "$manifest_path")"
             "$(jq -r '.packages.firmware' "$manifest_path")"
+            "$(jq -r '.packages.alsa_ucm' "$manifest_path")"
           )
 
           if [[ "$BUILD_EL2" == "true" ]]; then
@@ -266,7 +267,7 @@ jobs:
               '"$DESKTOP_ENVIRONMENT"' \
               fonts-noto-cjk fonts-noto-color-emoji \
               gstreamer1.0-libav gstreamer1.0-plugins-ugly \
-              alsa-utils pipewire-alsa \
+              alsa-ucm-conf alsa-utils pipewire-alsa \
               '"$EXTRA_PACKAGES"'
 
             if dpkg --compare-versions "${UBUNTU_RELEASE}" gt "25.10"; then
@@ -287,6 +288,7 @@ jobs:
           image_deb_name="$(jq -r '.kernels.standard.packages.image' "$manifest_path")"
           modules_deb_name="$(jq -r '.kernels.standard.packages.modules' "$manifest_path")"
           firmware_deb_name="$(jq -r '.packages.firmware' "$manifest_path")"
+          alsa_ucm_deb_name="$(jq -r '.packages.alsa_ucm' "$manifest_path")"
           echo "$manifest_kernel_release" > "$WORKDIR/kernel-release.txt"
 
           el2_kernel_release=""
@@ -305,6 +307,7 @@ jobs:
           sudo cp "$PACKAGE_DEBS_DIR/$image_deb_name" "$ROOTFS_DIR/tmp/"
           sudo cp "$PACKAGE_DEBS_DIR/$modules_deb_name" "$ROOTFS_DIR/tmp/"
           sudo cp "$PACKAGE_DEBS_DIR/$firmware_deb_name" "$ROOTFS_DIR/tmp/"
+          sudo cp "$PACKAGE_DEBS_DIR/$alsa_ucm_deb_name" "$ROOTFS_DIR/tmp/"
           if [[ "$BUILD_EL2" == "true" ]]; then
             sudo cp "$PACKAGE_DEBS_DIR/$el2_image_deb_name" "$ROOTFS_DIR/tmp/"
             sudo cp "$PACKAGE_DEBS_DIR/$el2_modules_deb_name" "$ROOTFS_DIR/tmp/"
@@ -316,7 +319,7 @@ jobs:
           sudo mount -t sysfs sys "$ROOTFS_DIR/sys"
           sudo mount -t tmpfs tmpfs "$ROOTFS_DIR/run"
 
-          chroot_debs="/tmp/$image_deb_name /tmp/$modules_deb_name /tmp/$firmware_deb_name"
+          chroot_debs="/tmp/$image_deb_name /tmp/$modules_deb_name /tmp/$firmware_deb_name /tmp/$alsa_ucm_deb_name"
           if [[ "$BUILD_EL2" == "true" ]]; then
             chroot_debs="$chroot_debs /tmp/$el2_image_deb_name /tmp/$el2_modules_deb_name"
           fi

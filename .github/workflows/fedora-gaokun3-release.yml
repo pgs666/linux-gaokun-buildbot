@@ -165,6 +165,7 @@ jobs:
             "$(jq -r '.kernels.standard.packages.kernel' "$manifest_path")"
             "$(jq -r '.kernels.standard.packages.kernel_modules' "$manifest_path")"
             "$(jq -r '.packages.firmware' "$manifest_path")"
+            "$(jq -r '.packages.alsa_ucm' "$manifest_path")"
           )
 
           if [[ "$BUILD_EL2" == "true" ]]; then
@@ -234,6 +235,7 @@ jobs:
           kernel_rpm_name="$(jq -r '.kernels.standard.packages.kernel' "$manifest_path")"
           kernel_modules_rpm_name="$(jq -r '.kernels.standard.packages.kernel_modules' "$manifest_path")"
           firmware_rpm_name="$(jq -r '.packages.firmware' "$manifest_path")"
+          alsa_ucm_rpm_name="$(jq -r '.packages.alsa_ucm' "$manifest_path")"
           echo "$manifest_kernel_release" > "$WORKDIR/kernel-release.txt"
 
           el2_kernel_release=""
@@ -252,6 +254,7 @@ jobs:
             "\"$PACKAGE_RPMS_DIR/$kernel_rpm_name\""
             "\"$PACKAGE_RPMS_DIR/$kernel_modules_rpm_name\""
             "\"$PACKAGE_RPMS_DIR/$firmware_rpm_name\""
+            "\"$PACKAGE_RPMS_DIR/$alsa_ucm_rpm_name\""
           )
           if [[ "$BUILD_EL2" == "true" ]]; then
             rpm_install_args+=(

@@ -26,6 +26,7 @@ DEB_TOPDIR="$WORKDIR/debbuild"
 BUILDROOT_DIR="$WORKDIR/package-buildroots"
 DEB_ARCH="arm64"
 FIRMWARE_DEB_VERSION="${FIRMWARE_DEB_VERSION:-$(date -u +%Y%m%d)-1}"
+UCM_DEB_VERSION="${UCM_DEB_VERSION:-$(date -u +%Y%m%d)-1}"
 BUILD_TIME_UTC="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
 mkdir -p "$ARTIFACT_DIR" "$DEB_TOPDIR"
@@ -85,6 +86,10 @@ set -e
 ${postrm}
 EOF
     chmod 755 "$deb_dir/postrm"
+  fi
+
+  if [[ -f "$template_root/DEBIAN/triggers" ]]; then
+    install -Dm644 "$template_root/DEBIAN/triggers" "$deb_dir/triggers"
   fi
 
   dpkg-deb --build --root-owner-group "$stage_dir" "$DEB_TOPDIR/${pkg_name}_${version}_${arch}.deb"
@@ -237,6 +242,60 @@ build_firmware_package() {
   FIRMWARE_DEB="$firmware_deb"
 }
 
+build_ucm_package() {
+  local ucm_stage="$BUILDROOT_DIR/alsa-ucm-gaokun3"
+  local ucm_deb="alsa-ucm-gaokun3_${UCM_DEB_VERSION}_all.deb"
+
+  rm -rf "$ucm_stage"
+  mkdir -p "$ucm_stage/usr/lib/gaokun3/audio"
+  install -Dm644 "$GAOKUN_DIR/tools/audio/sc8280xp.conf" \
+    "$ucm_stage/usr/lib/gaokun3/audio/sc8280xp.conf"
+  install -Dm644 "$GAOKUN_DIR/tools/audio/HUAWEI-GAOKUN3.conf" \
+    "$ucm_stage/usr/lib/gaokun3/audio/HUAWEI-GAOKUN3.conf"
+  cat > "$ucm_stage/usr/lib/gaokun3/audio/install-ucm-overlay" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+src_dir="/usr/lib/gaokun3/audio"
+dst_dir="/usr/share/alsa/ucm2/Qualcomm/sc8280xp"
+
+install -d "$dst_dir"
+
+install_if_changed() {
+  local src="$1"
+  local dst="$2"
+
+  if [[ -e "$dst" ]] && cmp -s "$src" "$dst"; then
+    return 0
+  fi
+
+  install -m 0644 "$src" "$dst"
+}
+
+install_if_changed "$src_dir/sc8280xp.conf" "$dst_dir/sc8280xp.conf"
+install_if_changed "$src_dir/HUAWEI-GAOKUN3.conf" "$dst_dir/HUAWEI-GAOKUN3.conf"
+EOF
+  chmod 0755 "$ucm_stage/usr/lib/gaokun3/audio/install-ucm-overlay"
+
+  local ucm_description
+  ucm_description="$(
+    render_template_to_string \
+      "$GAOKUN_DIR/packaging/deb/alsa-ucm-gaokun3/descriptions/package.in"
+  )"
+  local ucm_postinst
+  ucm_postinst="$(
+    render_template_to_string \
+      "$GAOKUN_DIR/packaging/deb/alsa-ucm-gaokun3/DEBIAN/postinst.in"
+  )"
+  build_deb "$GAOKUN_DIR/packaging/deb/alsa-ucm-gaokun3" \
+    "alsa-ucm-gaokun3" "$ucm_stage" "$UCM_DEB_VERSION" \
+    "$ucm_description" "alsa-ucm-conf" "all" \
+    "$ucm_postinst"
+
+  cp "$DEB_TOPDIR/$ucm_deb" "$ARTIFACT_DIR/"
+  UCM_DEB="$ucm_deb"
+}
+
 build_kernel_variant "standard" "" "$KERN_SRC_BASE" "$KERN_OUT" "$BASE_KREL" \
   "sc8280xp-huawei-gaokun3.dtb"
 
@@ -252,6 +311,7 @@ if [[ "$BUILD_EL2" == "true" ]]; then
 fi
 
 build_firmware_package
+build_ucm_package
 
 EL2_MANIFEST_BLOCK=""
 EL2_RELEASE_BLOCK=""
@@ -294,7 +354,8 @@ cat >"$ARTIFACT_DIR/package-manifest.json" <<EOF
     }${EL2_MANIFEST_BLOCK}
   },
   "packages": {
-    "firmware": "${FIRMWARE_DEB}"
+    "firmware": "${FIRMWARE_DEB}",
+    "alsa_ucm": "${UCM_DEB}"
   }
 }
 EOF
@@ -306,6 +367,7 @@ cat >"$ARTIFACT_DIR/package-release-body.md" <<EOF
 - Kernel Tag: \`${KERNEL_TAG}\`
 - EL2 Package Set Included: \`${BUILD_EL2}\`
 - Firmware Version: \`${FIRMWARE_DEB_VERSION}\`
+- ALSA UCM Version: \`${UCM_DEB_VERSION}\`
 - Architecture: \`${DEB_ARCH}\`
 - Build Time (UTC): \`${BUILD_TIME_UTC}\`
 
@@ -316,4 +378,5 @@ cat >"$ARTIFACT_DIR/package-release-body.md" <<EOF
 - \`${HEADERS_DEB_STANDARD}\`
 ${EL2_RELEASE_BLOCK}
 - \`${FIRMWARE_DEB}\`
+- \`${UCM_DEB}\`
 EOF

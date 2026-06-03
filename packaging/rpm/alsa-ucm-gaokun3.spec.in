@@ -1,0 +1,44 @@
+%global debug_package %{nil}
+%global _debugsource_packages 0
+
+Name:           alsa-ucm-gaokun3
+Version:        @UCM_VERSION@
+Release:        1%{?dist}
+Summary:        ALSA UCM overlay for Huawei MateBook E Go 2023
+License:        MIT
+BuildArch:      noarch
+Source0:        @SOURCE_NAME@
+Requires:       alsa-ucm
+
+%description
+ALSA UCM overlay for Huawei MateBook E Go 2023 (gaokun3). The overlay is
+installed outside the distribution-owned ALSA UCM tree and reapplied after
+transactions that modify the SC8280XP UCM directory.
+
+%prep
+%setup -q -c -T
+tar -xzf %{SOURCE0}
+
+%build
+
+%install
+mkdir -p %{buildroot}
+cp -a usr %{buildroot}/
+
+%post
+/usr/lib/gaokun3/audio/install-ucm-overlay || :
+
+%posttrans
+/usr/lib/gaokun3/audio/install-ucm-overlay || :
+
+%transfiletriggerin -- /usr/share/alsa/ucm2/Qualcomm/sc8280xp
+/usr/lib/gaokun3/audio/install-ucm-overlay || :
+
+%files
+/usr/lib/gaokun3/audio/HUAWEI-GAOKUN3.conf
+/usr/lib/gaokun3/audio/sc8280xp.conf
+/usr/lib/gaokun3/audio/install-ucm-overlay
+
+%changelog
+* Thu Jun 04 2026 cool <bilibili@att.net> - @UCM_VERSION@-1
+- Build gaokun3 ALSA UCM overlay RPM

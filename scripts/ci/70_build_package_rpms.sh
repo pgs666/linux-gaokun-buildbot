@@ -28,6 +28,7 @@ RPM_BUILD_JOBS="${RPM_BUILD_JOBS:-$(nproc)}"
 RPM_PAYLOAD_LEVEL="${RPM_PAYLOAD_LEVEL:-2}"
 RPM_PAYLOAD_MACRO="w${RPM_PAYLOAD_LEVEL}T${RPM_BUILD_JOBS}.xzdio"
 FIRMWARE_RPM_VERSION="${FIRMWARE_RPM_VERSION:-$(date -u +%Y%m%d)}"
+UCM_RPM_VERSION="${UCM_RPM_VERSION:-$(date -u +%Y%m%d)}"
 BUILD_TIME_UTC="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
 mkdir -p \
@@ -202,6 +203,57 @@ build_firmware_rpm() {
   cp "$firmware_rpm_path" "$ARTIFACT_DIR/$FIRMWARE_RPM"
 }
 
+build_ucm_rpm() {
+  local ucm_stage="$BUILDROOT_DIR/alsa-ucm-gaokun3"
+  local ucm_tar="alsa-ucm-gaokun3.tar.gz"
+
+  rm -rf "$ucm_stage"
+  mkdir -p "$ucm_stage/usr/lib/gaokun3/audio"
+  install -Dm644 "$GAOKUN_DIR/tools/audio/sc8280xp.conf" \
+    "$ucm_stage/usr/lib/gaokun3/audio/sc8280xp.conf"
+  install -Dm644 "$GAOKUN_DIR/tools/audio/HUAWEI-GAOKUN3.conf" \
+    "$ucm_stage/usr/lib/gaokun3/audio/HUAWEI-GAOKUN3.conf"
+  cat > "$ucm_stage/usr/lib/gaokun3/audio/install-ucm-overlay" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+src_dir="/usr/lib/gaokun3/audio"
+dst_dir="/usr/share/alsa/ucm2/Qualcomm/sc8280xp"
+
+install -d "$dst_dir"
+
+install_if_changed() {
+  local src="$1"
+  local dst="$2"
+
+  if [[ -e "$dst" ]] && cmp -s "$src" "$dst"; then
+    return 0
+  fi
+
+  install -m 0644 "$src" "$dst"
+}
+
+install_if_changed "$src_dir/sc8280xp.conf" "$dst_dir/sc8280xp.conf"
+install_if_changed "$src_dir/HUAWEI-GAOKUN3.conf" "$dst_dir/HUAWEI-GAOKUN3.conf"
+EOF
+  chmod 0755 "$ucm_stage/usr/lib/gaokun3/audio/install-ucm-overlay"
+
+  prepare_tarball "$ucm_tar" "$ucm_stage"
+
+  render_spec_template \
+    "$GAOKUN_DIR/packaging/rpm/alsa-ucm-gaokun3.spec.in" \
+    "$RPM_TOPDIR/SPECS/alsa-ucm-gaokun3.spec" \
+    "@UCM_VERSION@" "$UCM_RPM_VERSION" \
+    "@SOURCE_NAME@" "$ucm_tar"
+
+  rpmbuild "${rpmbuild_common_args[@]}" -bb "$RPM_TOPDIR/SPECS/alsa-ucm-gaokun3.spec"
+
+  local ucm_rpm_path
+  ucm_rpm_path="$(find "$RPM_TOPDIR/RPMS" -name 'alsa-ucm-gaokun3-*.rpm' -print -quit)"
+  UCM_RPM="$(basename "$ucm_rpm_path")"
+  cp "$ucm_rpm_path" "$ARTIFACT_DIR/$UCM_RPM"
+}
+
 rpmbuild_common_args=(
   --define "_topdir $RPM_TOPDIR"
   --define "_binary_payload $RPM_PAYLOAD_MACRO"
@@ -223,6 +275,7 @@ if [[ "$BUILD_EL2" == "true" ]]; then
 fi
 
 build_firmware_rpm
+build_ucm_rpm
 
 EL2_MANIFEST_BLOCK=""
 EL2_RELEASE_BLOCK=""
@@ -265,7 +318,8 @@ cat >"$ARTIFACT_DIR/package-manifest.json" <<EOF
     }${EL2_MANIFEST_BLOCK}
   },
   "packages": {
-    "firmware": "${FIRMWARE_RPM}"
+    "firmware": "${FIRMWARE_RPM}",
+    "alsa_ucm": "${UCM_RPM}"
   }
 }
 EOF
@@ -277,6 +331,7 @@ cat >"$ARTIFACT_DIR/package-release-body.md" <<EOF
 - Kernel Tag: \`${KERNEL_TAG}\`
 - EL2 Package Set Included: \`${BUILD_EL2}\`
 - Firmware Version: \`${FIRMWARE_RPM_VERSION}\`
+- ALSA UCM Version: \`${UCM_RPM_VERSION}\`
 - Architecture: \`aarch64\`
 - Build Time (UTC): \`${BUILD_TIME_UTC}\`
 
@@ -287,4 +342,5 @@ cat >"$ARTIFACT_DIR/package-release-body.md" <<EOF
 - \`${DEVEL_RPM_STANDARD}\`
 ${EL2_RELEASE_BLOCK}
 - \`${FIRMWARE_RPM}\`
+- \`${UCM_RPM}\`
 EOF
