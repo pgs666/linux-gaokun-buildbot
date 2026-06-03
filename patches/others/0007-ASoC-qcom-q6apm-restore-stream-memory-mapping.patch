@@ -4,10 +4,10 @@ Date: Wed, 13 May 2026 14:43:07 +0000
 Subject: [PATCH] ASoC: qcom: q6apm: restore stream memory mapping
 
 ---
- sound/soc/qcom/qdsp6/q6apm-dai.c | 102 +++--------------------
+ sound/soc/qcom/qdsp6/q6apm-dai.c | 103 +++--------------------
  sound/soc/qcom/qdsp6/q6apm.c     | 135 ++++++++++++++++++++++++++++++-
  sound/soc/qcom/qdsp6/q6apm.h     |  10 ++-
- 3 files changed, 150 insertions(+), 97 deletions(-)
+ 3 files changed, 150 insertions(+), 98 deletions(-)
 
 diff --git a/sound/soc/qcom/qdsp6/q6apm-dai.c b/sound/soc/qcom/qdsp6/q6apm-dai.c
 index 3a1be41df..f4e745d6e 100644
@@ -166,6 +166,14 @@ index 3a1be41df..f4e745d6e 100644
  		if (ret < 0)
  			return -ENOMEM;
  
+@@ -841,7 +757,6 @@ static const struct snd_soc_component_driver q6apm_fe_dai_component = {
+ 	.close		= q6apm_dai_close,
+ 	.prepare	= q6apm_dai_prepare,
+ 	.pcm_new	= q6apm_dai_pcm_new,
+-	.pcm_free	= q6apm_dai_pcm_free,
+ 	.hw_params	= q6apm_dai_hw_params,
+ 	.pointer	= q6apm_dai_pointer,
+ 	.trigger	= q6apm_dai_trigger,
 diff --git a/sound/soc/qcom/qdsp6/q6apm.c b/sound/soc/qcom/qdsp6/q6apm.c
 index 2ab378fb5..03896ddd7 100644
 --- a/sound/soc/qcom/qdsp6/q6apm.c
