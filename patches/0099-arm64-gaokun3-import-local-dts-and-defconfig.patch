@@ -597,7 +597,6 @@ index 9819454ab..e67a7ce74 100644
 +&spi6 {
 +	pinctrl-0 = <&spi6_default>;
 +	pinctrl-names = "default";
-+	qcom,force-gsi-mode;
 +
 +	status = "okay";
 +
