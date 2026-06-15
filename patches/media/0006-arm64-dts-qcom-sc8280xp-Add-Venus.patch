@@ -16,13 +16,12 @@ diff --git a/arch/arm64/boot/dts/qcom/sc8280xp.dtsi b/arch/arm64/boot/dts/qcom/s
 index 60228990c..6f4fcd126 100644
 --- a/arch/arm64/boot/dts/qcom/sc8280xp.dtsi
 +++ b/arch/arm64/boot/dts/qcom/sc8280xp.dtsi
-@@ -11,6 +11,7 @@
+@@ -11,5 +11,6 @@
  #include <dt-bindings/clock/qcom,rpmh.h>
  #include <dt-bindings/clock/qcom,sc8280xp-camcc.h>
  #include <dt-bindings/clock/qcom,sc8280xp-lpasscc.h>
 +#include <dt-bindings/clock/qcom,sm8350-videocc.h>
  #include <dt-bindings/dma/qcom-gpi.h>
- #include <dt-bindings/firmware/qcom,scm.h>
  #include <dt-bindings/interconnect/qcom,osm-l3.h>
 @@ -698,6 +699,11 @@ reserved-region@85b00000 {
  			no-map;
