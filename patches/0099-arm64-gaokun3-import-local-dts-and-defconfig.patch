@@ -1,22 +1,22 @@
-From 9ebcdae133d30857365226c2fe8e869dad7fb68e Mon Sep 17 00:00:00 2001
-From: local-build <local-build@localhost>
-Date: Sun, 5 Apr 2026 13:00:54 +0800
+From 840abb47b88fbe42d0a459d73867834a259b0584 Mon Sep 17 00:00:00 2001
+From: KawaiiHachimi <bilibili@att.net>
+Date: Mon, 11 May 2026 03:22:53 +0000
 Subject: [PATCH] arm64: gaokun3: import local dts and defconfig
 
 ---
- .../qcom/sc8280xp-huawei-gaokun3-camera.dtsi  | 149 +++++
- .../boot/dts/qcom/sc8280xp-huawei-gaokun3.dts | 389 ++++++++++---
+ .../qcom/sc8280xp-huawei-gaokun3-camera.dtsi  | 307 +++++++++++
+ .../boot/dts/qcom/sc8280xp-huawei-gaokun3.dts | 420 +++++++++++---
  arch/arm64/configs/gaokun3_defconfig          | 511 ++++++++++++++++++
- 3 files changed, 960 insertions(+), 89 deletions(-)
+ 3 files changed, 1149 insertions(+), 89 deletions(-)
  create mode 100644 arch/arm64/boot/dts/qcom/sc8280xp-huawei-gaokun3-camera.dtsi
  create mode 100644 arch/arm64/configs/gaokun3_defconfig
 
 diff --git a/arch/arm64/boot/dts/qcom/sc8280xp-huawei-gaokun3-camera.dtsi b/arch/arm64/boot/dts/qcom/sc8280xp-huawei-gaokun3-camera.dtsi
 new file mode 100644
-index 000000000000..be2f9b41df81
+index 000000000..69fa4db9b
 --- /dev/null
 +++ b/arch/arm64/boot/dts/qcom/sc8280xp-huawei-gaokun3-camera.dtsi
-@@ -0,0 +1,149 @@
+@@ -0,0 +1,307 @@
 +// SPDX-License-Identifier: BSD-3-Clause
 +/*
 + * Copyright (c) 2021, The Linux Foundation. All rights reserved.
@@ -24,127 +24,269 @@ index 000000000000..be2f9b41df81
 +
 +#include <dt-bindings/leds/common.h>
 +
++/* remove due to gpio pins collision, skip 2nd instance won't break things */
++/delete-node/ &cci1_i2c1;
++/delete-node/ &cci1_i2c1_default;
++/delete-node/ &cci1_i2c1_sleep;
++
++/* override */
++/delete-node/ &vreg_l2b;
++
 +/ {
++	aliases {
++		i2c1 = &cci1_i2c0;
++		i2c2 = &cci2_i2c1;
++	};
++
 +	leds {
 +		compatible = "gpio-leds";
 +
++		pinctrl-0 = <&cam_indicator_en>, <&camera_flash_en>;
 +		pinctrl-names = "default";
-+		pinctrl-0 = <&camf_indicator_en>;
 +
-+		flash_camf: led-camera-indicator {
-+			label = "white:camera-indicator";
++		privacy_led: privacy-led {
 +			function = LED_FUNCTION_INDICATOR;
 +			color = <LED_COLOR_ID_WHITE>;
 +			gpios = <&tlmm 34 GPIO_ACTIVE_HIGH>;
++			default-state = "off";
++			panic-indicator;
++		};
++
++		camera_flash: led {
++			function = LED_FUNCTION_FLASH;
++			color = <LED_COLOR_ID_WHITE>;
++			gpios = <&tlmm 93 GPIO_ACTIVE_HIGH>;
 +			linux,default-trigger = "none";
 +			default-state = "off";
-+			/* Reuse as a panic indicator until we get a "camera on" trigger */
-+			panic-indicator;
 +		};
 +	};
 +
-+	vreg_camf_1v2: regulator-camf-lv2 {
++	vreg_camf_1p2: regulator-camf-1p2 {
 +		compatible = "regulator-fixed";
 +
-+		regulator-name = "CAMF_1V2";
++		regulator-name = "vreg_camf_1p2";
 +		regulator-min-microvolt = <1200000>;
 +		regulator-max-microvolt = <1200000>;
 +
 +		gpio = <&tlmm 44 GPIO_ACTIVE_HIGH>;
 +		enable-active-high;
 +
-+		pinctrl-0 = <&camf_lv2_reg_en>;
++		pinctrl-0 = <&camf_1p2_reg_en>;
 +		pinctrl-names = "default";
++	};
 +
-+		regulator-boot-on;
++	vreg_camr: regulator-camr {
++		compatible = "regulator-fixed";
++
++		regulator-name = "vreg_camr";
++
++		gpio = <&tlmm 92 GPIO_ACTIVE_HIGH>;
++		enable-active-high;
++
++		pinctrl-0 = <&camr_reg_en>;
++		pinctrl-names = "default";
++	};
++};
++
++&apps_rsc {
++	regulators-0 {
++		vreg_l2b: ldo2 {
++			regulator-name = "vreg_l2b";
++			regulator-min-microvolt = <1800000>;
++			regulator-max-microvolt = <2800000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++		};
++
++		vreg_l7b: ldo7 {
++			regulator-name = "vreg_l7b";
++			regulator-min-microvolt = <2800000>;
++			regulator-max-microvolt = <2800000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++		};
++	};
++
++	regulators-1 {
++		vreg_l2c: ldo2 {
++			regulator-name = "vreg_l2c";
++			regulator-min-microvolt = <1800000>;
++			regulator-max-microvolt = <1800000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			/* may be used in audio codec driver (ACD) too */
++			// regulator-allow-set-load;
++			// regulator-allowed-modes = <RPMH_REGULATOR_MODE_LPM
++			// 			   RPMH_REGULATOR_MODE_HPM>;
++			regulator-always-on;
++		};
++
++		vreg_l11c: ldo11 {
++			regulator-name = "vreg_l11c";
++			regulator-min-microvolt = <2800000>;
++			regulator-max-microvolt = <2800000>;
++			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++		};
 +	};
 +};
 +
 +&camss {
-+
-+	/* CSIPHY0 CSIPHY1 1.2v = l4d, 0.88v = l6d
-+	 * TODO: CSIPHY2, CSIPHY3 1.2v = l3b, 0.88v = l6b
++	/*
++	 * CSIPHY0, CSIPHY1 1.2v = l4d, 0.88v = l6d
++	 * CSIPHY2, CSIPHY3 1.2v = l3b, 0.88v = l6b
++	 *
++	 * drivers/media/platform/qcom/camss/camss.c
 +	 */
 +
-+	vdda-phy-supply = <&vreg_l6d>;
-+	vdda-pll-supply = <&vreg_l4d>;
++	vdda-phy-supply = <&vreg_l6b>;
++	vdda-pll-supply = <&vreg_l3b>;
 +
 +	status = "okay";
 +
 +	ports {
-+		port@0 { The port index denotes CSIPHY id i.e. csiphy0
-+			csiphy0_lanes01_ep: endpoint@0 {
++		port@0 {
++			csiphy0_ep: endpoint@0 {
 +				reg = <0>;
-+				clock-lanes = <7>; required
-+				data-lanes = <0 1>;
++
++				clock-lanes = <7>;
++				data-lanes = <0 1 2 3>;
++				remote-endpoint = <&s5k3l6_ep>;
++			};
++		};
++
++		port@3 {
++			csiphy3_ep: endpoint@0 {
++				reg = <0>;
++
++				clock-lanes = <7>;
++				data-lanes = <0 1 2 3>;
 +				remote-endpoint = <&hi846_ep>;
 +			};
 +		};
 +	};
 +};
 +
-+
 +&cci1 {
 +	status = "okay";
 +};
-+/*
++
 +&cci1_i2c0 {
-+	vcm@c {
++	voice_coil_motor: vcm@c {
++		compatible = "dongwoon,dw9714";
++		reg = <0xc>;
++		vcc-supply = <&vreg_l7b>; /* FIXME: require l2c on first */
 +	};
 +
++	/*
++	 * https://source.puri.sm/Librem5/linux/-/blob/pureos/latest/drivers/media/i2c/s5k3l6xx.c
++	 *
++	 * poor image quality, no plan to extract downstream registers
++	 * configuration for it. I think nobody uses camera without tuning
++	 * to take photos. Front camera with conference is enough.
++	 *
++	 * This sensor has never been detected on 2023 model
++	 */
 +	camera_rear: camera@10 {
++		compatible = "samsung,s5k3l6xx";
 +		reg = <0x10>;
++
++		pinctrl-0 = <&camr_rgb_default>;
++		pinctrl-names = "default";
++
 +		clocks = <&camcc CAMCC_MCLK4_CLK>;
++		clock-names = "mclk";
++		clock-frequency = <24000000>;
++
++		rstn-gpios = <&tlmm 7 GPIO_ACTIVE_LOW>;
++
++		vddio-supply = <&vreg_camr>;
++		vdda-supply = <&vreg_l2b>; // 2.8v
++		vddd-supply = <&vreg_l2c>; // 1.8v
++
++		leds = <&privacy_led>; // &camera_flash can't be enabled for now
++		led-names = "privacy";
++
++		lens-focus = <&voice_coil_motor>;
++
++		orientation = <1>;
++		rotation = <180>; /* FIXME */
++
++		port {
++			s5k3l6_ep: endpoint {
++				data-lanes = <1 2 3 4>;
++				remote-endpoint = <&csiphy0_ep>;
++			};
++		};
 +	};
++
++	// eeprom@50/51 <= l2c
 +};
-+*/
 +
 +&cci2 {
 +	status = "okay";
 +};
 +
 +&cci2_i2c1 {
++	// ??? @10 appears when CAMCC_MCLK3_CLK@19.2MHz
++	// On 2023 model, S5K4H7@2d, image quality is better than hi846
++
 +	camera_front: camera@20 {
 +		compatible = "hynix,hi846";
 +		reg = <0x20>;
 +
-+		pinctrl-names = "default";
 +		pinctrl-0 = <&camf_rgb_default>;
++		pinctrl-names = "default";
 +
 +		clocks = <&camcc CAMCC_MCLK3_CLK>;
-+		clock-frequency = <24000000>; dummy, the default one is 19.2Mhz
++
++		assigned-clocks = <&camcc CAMCC_MCLK3_CLK>;
++		assigned-clock-rates = <24000000>;
 +
 +		reset-gpios = <&tlmm 15 GPIO_ACTIVE_LOW>;
 +		vddio-supply = <&vreg_l2c>;
 +		vdda-supply = <&vreg_l11c>;
-+		vddd-supply = <&vreg_camf_1v2>;
++		vddd-supply = <&vreg_camf_1p2>;
++
++		leds = <&privacy_led>;
++		led-names = "privacy";
 +
 +		orientation = <0>;	/* Front facing */
-+		rotation = <90>;
-+
-+//		flash-leds = <&flash_camf>;
++		rotation = <0>;
 +
 +		port {
 +			hi846_ep: endpoint {
-+				data-lanes = <1 2>;
-+				link-frequencies = /bits/ 64 <80000000 200000000>;
-+				remote-endpoint = <&csiphy0_lanes01_ep>;
++				data-lanes = <1 2 3 4>;
++				link-frequencies = /bits/ 64 <180000000 360000000>;
++				remote-endpoint = <&csiphy3_ep>;
 +			};
 +		};
 +	};
++
++	// eeprom@50
++	// actuator???@58, 2023 only
 +};
 +
 +&tlmm {
-+
-+	camf_indicator_en: camf-indicator-en-state {
++	cam_indicator_en: cam-indicator-en-state {
 +		pins = "gpio34";
 +		function = "gpio";
 +		drive-strength = <2>;
 +		bias-disable;
 +	};
 +
-+	camf_lv2_reg_en: camf-lv2-reg-en-state {
++	camera_flash_en: camera-flash-en-state {
++		pins = "gpio93";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-disable;
++	};
++
++	camf_1p2_reg_en: camf-1p2-reg-en-state {
 +		pins = "gpio44";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-disable;
++	};
++
++	camr_reg_en: camr-reg-en-state {
++		pins = "gpio92";
 +		function = "gpio";
 +		drive-strength = <2>;
 +		bias-disable;
@@ -154,7 +296,7 @@ index 000000000000..be2f9b41df81
 +		mclk-pins {
 +			pins = "gpio17";
 +			function = "cam_mclk";
-+			drive-strength = <16>;
++			drive-strength = <6>;
 +			bias-disable;
 +		};
 +
@@ -165,9 +307,25 @@ index 000000000000..be2f9b41df81
 +			bias-disable;
 +		};
 +	};
++
++	camr_rgb_default: camr-rgb-default-state {
++		mclk-pins {
++			pins = "gpio6";
++			function = "cam_mclk";
++			drive-strength = <6>;
++			bias-disable;
++		};
++
++		sc-rgb-xshut-n-pins {
++			pins = "gpio7";
++			function = "gpio";
++			drive-strength = <2>;
++			bias-disable;
++		};
++	};
 +};
 diff --git a/arch/arm64/boot/dts/qcom/sc8280xp-huawei-gaokun3.dts b/arch/arm64/boot/dts/qcom/sc8280xp-huawei-gaokun3.dts
-index 9819454abe13..4cdeeb50e5b7 100644
+index 9819454ab..e67a7ce74 100644
 --- a/arch/arm64/boot/dts/qcom/sc8280xp-huawei-gaokun3.dts
 +++ b/arch/arm64/boot/dts/qcom/sc8280xp-huawei-gaokun3.dts
 @@ -11,6 +11,7 @@
@@ -450,13 +608,13 @@ index 9819454abe13..4cdeeb50e5b7 100644
 +		// TODO: power supply, always on rencently
  		interrupts-extended = <&tlmm 175 IRQ_TYPE_LEVEL_LOW>;
 +		reset-gpios = <&tlmm 99 GPIO_ACTIVE_LOW>;
-+
-+		panel = <&panel>;
-+
-+		spi-max-frequency = <12000000>;
  
 -		vdd-supply = <&vreg_misc_3p3>;
 -		vddl-supply = <&vreg_s10b>;
++		panel = <&panel>;
++
++		spi-max-frequency = <12000000>;
++
 +		touchscreen-size-x = <2560>;
 +		touchscreen-size-y = <1600>;
 +
@@ -474,16 +632,24 @@ index 9819454abe13..4cdeeb50e5b7 100644
  };
  
  &i2c15 {
-@@ -637,7 +684,7 @@ embedded-controller@38 {
+@@ -637,7 +684,15 @@ embedded-controller@38 {
  		compatible = "huawei,gaokun3-ec";
  		reg = <0x38>;
  
 -		interrupts-extended = <&tlmm 107 IRQ_TYPE_LEVEL_LOW>;
-+		interrupts-extended = <&tlmm 107 IRQ_TYPE_LEVEL_LOW>; /* shared */
++		interrupts-extended = <&pdc 215 IRQ_TYPE_LEVEL_LOW>;
++		enable-gpios = <&tlmm 173 GPIO_ACTIVE_HIGH>;
++		bat-gpios = <&tlmm 41 GPIO_ACTIVE_HIGH>;
++
++		// not stable yet, so comment out it
++		// wakeup-source;
++
++		pinctrl-0 = <&ec_default>;
++		pinctrl-names = "default";
  
  		#address-cells = <1>;
  		#size-cells = <0>;
-@@ -647,7 +694,6 @@ connector@0 {
+@@ -647,7 +702,6 @@ connector@0 {
  			reg = <0>;
  			power-role = "dual";
  			data-role = "dual";
@@ -491,7 +657,7 @@ index 9819454abe13..4cdeeb50e5b7 100644
  			ports {
  				#address-cells = <1>;
  				#size-cells = <0>;
-@@ -655,7 +701,7 @@ ports {
+@@ -655,7 +709,7 @@ ports {
  				port@0 {
  					reg = <0>;
  
@@ -500,7 +666,7 @@ index 9819454abe13..4cdeeb50e5b7 100644
  						remote-endpoint = <&usb_0_dwc3_hs>;
  					};
  				};
-@@ -663,7 +709,7 @@ ucsi0_hs_in: endpoint {
+@@ -663,7 +717,7 @@ ucsi0_hs_in: endpoint {
  				port@1 {
  					reg = <1>;
  
@@ -509,7 +675,7 @@ index 9819454abe13..4cdeeb50e5b7 100644
  						remote-endpoint = <&usb_0_qmpphy_out>;
  					};
  				};
-@@ -725,7 +771,8 @@ &mdss0_dp0 {
+@@ -725,7 +779,8 @@ &mdss0_dp0 {
  };
  
  &mdss0_dp0_out {
@@ -519,7 +685,7 @@ index 9819454abe13..4cdeeb50e5b7 100644
  	remote-endpoint = <&usb_0_qmpphy_dp_in>;
  };
  
-@@ -734,10 +781,92 @@ &mdss0_dp1 {
+@@ -734,10 +789,92 @@ &mdss0_dp1 {
  };
  
  &mdss0_dp1_out {
@@ -613,7 +779,7 @@ index 9819454abe13..4cdeeb50e5b7 100644
  &pcie2a {
  	perst-gpios = <&tlmm 143 GPIO_ACTIVE_LOW>;
  	wake-gpios = <&tlmm 145 GPIO_ACTIVE_LOW>;
-@@ -785,6 +914,9 @@ wifi@0 {
+@@ -785,6 +922,9 @@ wifi@0 {
  		vddrfa0p8-supply = <&vreg_pmu_rfa_0p8>;
  		vddrfa1p2-supply = <&vreg_pmu_rfa_1p2>;
  		vddrfa1p8-supply = <&vreg_pmu_rfa_1p7>;
@@ -623,7 +789,7 @@ index 9819454abe13..4cdeeb50e5b7 100644
  	};
  };
  
-@@ -969,13 +1101,18 @@ &remoteproc_nsp0 {
+@@ -969,13 +1109,18 @@ &remoteproc_nsp0 {
  	status = "okay";
  };
  
@@ -643,7 +809,7 @@ index 9819454abe13..4cdeeb50e5b7 100644
  	audio-routing = "SpkrLeft IN", "WSA_SPK1 OUT",
  			"SpkrRight IN", "WSA_SPK2 OUT",
  			"IN1_HPHL", "HPHL_OUT",
-@@ -1125,6 +1262,8 @@ bluetooth {
+@@ -1125,6 +1270,8 @@ bluetooth {
  		vddrfa1p8-supply = <&vreg_pmu_rfa_1p7>;
  
  		max-speed = <3200000>;
@@ -652,7 +818,7 @@ index 9819454abe13..4cdeeb50e5b7 100644
  	};
  };
  
-@@ -1141,7 +1280,7 @@ &usb_0_dwc3_hs {
+@@ -1141,7 +1288,7 @@ &usb_0_dwc3_hs {
  };
  
  &usb_0_hsphy {
@@ -661,7 +827,7 @@ index 9819454abe13..4cdeeb50e5b7 100644
  	vdda18-supply = <&vreg_l1c>;
  	vdda33-supply = <&vreg_l7d>;
  
-@@ -1149,9 +1288,10 @@ &usb_0_hsphy {
+@@ -1149,9 +1296,10 @@ &usb_0_hsphy {
  };
  
  &usb_0_qmpphy {
@@ -674,7 +840,7 @@ index 9819454abe13..4cdeeb50e5b7 100644
  	orientation-switch;
  
  	status = "okay";
-@@ -1178,7 +1318,7 @@ &usb_1_dwc3_hs {
+@@ -1178,7 +1326,7 @@ &usb_1_dwc3_hs {
  };
  
  &usb_1_hsphy {
@@ -683,7 +849,7 @@ index 9819454abe13..4cdeeb50e5b7 100644
  	vdda18-supply = <&vreg_l1c>;
  	vdda33-supply = <&vreg_l13c>;
  
-@@ -1186,8 +1326,8 @@ &usb_1_hsphy {
+@@ -1186,8 +1334,8 @@ &usb_1_hsphy {
  };
  
  &usb_1_qmpphy {
@@ -694,7 +860,7 @@ index 9819454abe13..4cdeeb50e5b7 100644
  
  	orientation-switch;
  
-@@ -1207,7 +1347,7 @@ &usb_2 {
+@@ -1207,7 +1355,7 @@ &usb_2 {
  };
  
  &usb_2_hsphy0 {
@@ -703,7 +869,7 @@ index 9819454abe13..4cdeeb50e5b7 100644
  	vdda18-supply = <&vreg_l1c>;
  	vdda33-supply = <&vreg_l7d>;
  
-@@ -1215,7 +1355,7 @@ &usb_2_hsphy0 {
+@@ -1215,7 +1363,7 @@ &usb_2_hsphy0 {
  };
  
  &usb_2_hsphy1 {
@@ -712,7 +878,7 @@ index 9819454abe13..4cdeeb50e5b7 100644
  	vdda18-supply = <&vreg_l1c>;
  	vdda33-supply = <&vreg_l7d>;
  
-@@ -1223,7 +1363,7 @@ &usb_2_hsphy1 {
+@@ -1223,7 +1371,7 @@ &usb_2_hsphy1 {
  };
  
  &usb_2_hsphy2 {
@@ -721,7 +887,7 @@ index 9819454abe13..4cdeeb50e5b7 100644
  	vdda18-supply = <&vreg_l8c>;
  	vdda33-supply = <&vreg_l2d>;
  
-@@ -1231,7 +1371,7 @@ &usb_2_hsphy2 {
+@@ -1231,7 +1379,7 @@ &usb_2_hsphy2 {
  };
  
  &usb_2_hsphy3 {
@@ -730,7 +896,7 @@ index 9819454abe13..4cdeeb50e5b7 100644
  	vdda18-supply = <&vreg_l8c>;
  	vdda33-supply = <&vreg_l2d>;
  
-@@ -1239,15 +1379,15 @@ &usb_2_hsphy3 {
+@@ -1239,15 +1387,15 @@ &usb_2_hsphy3 {
  };
  
  &usb_2_qmpphy0 {
@@ -750,7 +916,7 @@ index 9819454abe13..4cdeeb50e5b7 100644
  
  	status = "okay";
  };
-@@ -1263,6 +1403,11 @@ &vamacro {
+@@ -1263,6 +1411,11 @@ &vamacro {
  	status = "okay";
  };
  
@@ -762,7 +928,7 @@ index 9819454abe13..4cdeeb50e5b7 100644
  &wsamacro {
  	status = "okay";
  };
-@@ -1300,8 +1445,28 @@ hastings_reg_en: hastings-reg-en-state {
+@@ -1300,8 +1453,28 @@ hastings_reg_en: hastings-reg-en-state {
  };
  
  &tlmm {
@@ -774,15 +940,15 @@ index 9819454abe13..4cdeeb50e5b7 100644
 +		drive-strength = <2>;
 +		bias-disable;
 +	};
- 
--	gpio-reserved-ranges = <70 2>, <74 6>, <83 4>, <125 2>, <128 2>, <154 4>;
++
 +	avee_reg_en: avee-reg-en-state {
 +		pins = "gpio53";
 +		function = "gpio";
 +		drive-strength = <2>;
 +		bias-disable;
 +	};
-+
+ 
+-	gpio-reserved-ranges = <70 2>, <74 6>, <83 4>, <125 2>, <128 2>, <154 4>;
 +	bl_reg_en: bl-reg-en-state {
 +		pins = "gpio0";
 +		function = "gpio";
@@ -792,7 +958,7 @@ index 9819454abe13..4cdeeb50e5b7 100644
  
  	bt_default: bt-default-state {
  		hstp-bt-en-pins {
-@@ -1318,6 +1483,13 @@ hstp-sw-ctrl-pins {
+@@ -1318,6 +1491,36 @@ hstp-sw-ctrl-pins {
  		};
  	};
  
@@ -803,10 +969,33 @@ index 9819454abe13..4cdeeb50e5b7 100644
 +		bias-pull-up;
 +	};
 +
++	ec_default: ec-default-state {
++		int-n-pins {
++			pins = "gpio103";
++			function = "gpio";
++			drive-strength = <2>;
++			bias-disable;
++		};
++
++		en-pins {
++			pins = "gpio173";
++			function = "gpio";
++			drive-strength = <4>;
++			bias-pull-down;
++		};
++
++		bat-pins {
++			pins = "gpio41";
++			function = "gpio";
++			drive-strength = <2>;
++			bias-pull-down;
++		};
++	};
++
  	i2c4_default: i2c4-default-state {
  		pins = "gpio171", "gpio172";
  		function = "qup4";
-@@ -1332,6 +1504,13 @@ i2c15_default: i2c15-default-state {
+@@ -1332,6 +1535,13 @@ i2c15_default: i2c15-default-state {
  		bias-pull-up;
  	};
  
@@ -820,7 +1009,7 @@ index 9819454abe13..4cdeeb50e5b7 100644
  	mode_pin_active: mode-pin-state {
  		pins = "gpio26";
  		function = "gpio";
-@@ -1411,6 +1590,39 @@ perst-n-pins {
+@@ -1411,6 +1621,39 @@ perst-n-pins {
  		};
  	};
  
@@ -860,7 +1049,7 @@ index 9819454abe13..4cdeeb50e5b7 100644
  	ts0_default: ts0-default-state {
  		int-n-pins {
  			pins = "gpio175";
-@@ -1424,7 +1636,6 @@ reset-n-pins {
+@@ -1424,7 +1667,6 @@ reset-n-pins {
  			function = "gpio";
  			drive-strength = <2>;
  			bias-disable;
@@ -870,7 +1059,7 @@ index 9819454abe13..4cdeeb50e5b7 100644
  
 diff --git a/arch/arm64/configs/gaokun3_defconfig b/arch/arm64/configs/gaokun3_defconfig
 new file mode 100644
-index 000000000000..6fbd85ffe407
+index 000000000..0108b380b
 --- /dev/null
 +++ b/arch/arm64/configs/gaokun3_defconfig
 @@ -0,0 +1,511 @@
@@ -1386,5 +1575,5 @@ index 000000000000..6fbd85ffe407
 +# CONFIG_FTRACE is not set
 +# CONFIG_RUNTIME_TESTING_MENU is not set
 -- 
-2.43.0
+2.52.0
 

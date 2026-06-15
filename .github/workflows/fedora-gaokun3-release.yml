@@ -1,4 +1,4 @@
-name: Build Fedora Gaokun3 Image
+name: Build Image - Fedora Gaokun3
 
 on:
   workflow_dispatch:
@@ -10,7 +10,7 @@ on:
       kernel_tag:
         description: Linux kernel tag
         required: true
-        default: "v7.0"
+        default: "v7.1-rc3"
       desktop_environment:
         description: Desktop environment package group (single package or group)
         required: true
@@ -165,6 +165,7 @@ jobs:
             "$(jq -r '.kernels.standard.packages.kernel' "$manifest_path")"
             "$(jq -r '.kernels.standard.packages.kernel_modules' "$manifest_path")"
             "$(jq -r '.packages.firmware' "$manifest_path")"
+            "$(jq -r '.packages.alsa_ucm' "$manifest_path")"
           )
 
           if [[ "$BUILD_EL2" == "true" ]]; then
@@ -234,6 +235,7 @@ jobs:
           kernel_rpm_name="$(jq -r '.kernels.standard.packages.kernel' "$manifest_path")"
           kernel_modules_rpm_name="$(jq -r '.kernels.standard.packages.kernel_modules' "$manifest_path")"
           firmware_rpm_name="$(jq -r '.packages.firmware' "$manifest_path")"
+          alsa_ucm_rpm_name="$(jq -r '.packages.alsa_ucm' "$manifest_path")"
           echo "$manifest_kernel_release" > "$WORKDIR/kernel-release.txt"
 
           el2_kernel_release=""
@@ -252,6 +254,7 @@ jobs:
             "\"$PACKAGE_RPMS_DIR/$kernel_rpm_name\""
             "\"$PACKAGE_RPMS_DIR/$kernel_modules_rpm_name\""
             "\"$PACKAGE_RPMS_DIR/$firmware_rpm_name\""
+            "\"$PACKAGE_RPMS_DIR/$alsa_ucm_rpm_name\""
           )
           if [[ "$BUILD_EL2" == "true" ]]; then
             rpm_install_args+=(
@@ -285,44 +288,15 @@ jobs:
             sudo depmod -b "$ROOTFS_DIR" -a "$el2_kernel_release"
           fi
 
-      - name: Populate rootfs (tools and services)
-        run: |
-          set -euxo pipefail
-          sudo mkdir -p \
-            "$ROOTFS_DIR/usr/local/bin" \
-            "$ROOTFS_DIR/usr/local/lib/gaokun-touchscreen-tuner" \
-            "$ROOTFS_DIR/etc/systemd/system" \
-            "$ROOTFS_DIR/etc/modules-load.d" \
-            "$ROOTFS_DIR/usr/share/applications" \
-            "$ROOTFS_DIR/usr/share/alsa/ucm2/Qualcomm/sc8280xp"
-          sudo cp "$GAOKUN_DIR/tools/touchscreen-tuner/touchscreen-tune" "$ROOTFS_DIR/usr/local/bin/"
-          sudo cp "$GAOKUN_DIR/tools/touchscreen-tuner/tune.py" \
-            "$ROOTFS_DIR/usr/local/lib/gaokun-touchscreen-tuner/"
-          sudo cp "$GAOKUN_DIR/tools/touchscreen-tuner/touchscreen-tune.desktop" \
-            "$ROOTFS_DIR/usr/share/applications/"
-          sudo chmod +x "$ROOTFS_DIR/usr/local/bin/touchscreen-tune"
-          sudo cp "$GAOKUN_DIR/tools/touchpad/huawei-tp-activate.py" "$ROOTFS_DIR/usr/local/bin/"
-          sudo cp "$GAOKUN_DIR/tools/touchpad/huawei-touchpad.service" "$ROOTFS_DIR/etc/systemd/system/"
-          sudo chmod +x "$ROOTFS_DIR/usr/local/bin/huawei-tp-activate.py"
-          sudo cp "$GAOKUN_DIR/tools/monitors/gdm-monitor-sync" "$ROOTFS_DIR/usr/local/bin/"
-          sudo cp "$GAOKUN_DIR/tools/monitors/gdm-monitor-sync.service" \
-            "$ROOTFS_DIR/etc/systemd/system/"
-          sudo chmod +x "$ROOTFS_DIR/usr/local/bin/gdm-monitor-sync"
-          sudo cp "$GAOKUN_DIR/tools/bluetooth/patch-nvm-bdaddr.py" "$ROOTFS_DIR/usr/local/bin/"
-          sudo cp "$GAOKUN_DIR/tools/bluetooth/patch-nvm-bdaddr.service" "$ROOTFS_DIR/etc/systemd/system/"
-          sudo cp "$GAOKUN_DIR/tools/image-assets/etc/modules-load.d/bluetooth.conf" \
-            "$ROOTFS_DIR/etc/modules-load.d/"
-          sudo chmod +x "$ROOTFS_DIR/usr/local/bin/patch-nvm-bdaddr.py"
-          sudo cp "$GAOKUN_DIR/tools/audio/sc8280xp.conf" \
-            "$ROOTFS_DIR/usr/share/alsa/ucm2/Qualcomm/sc8280xp/"
-
       - name: Create disk image and configure boot
         run: |
+          chmod +x scripts/ci/50_make_image_fedora.sh
           scripts/ci/50_make_image_fedora.sh
 
       - name: Package image and generate release info
         id: package
         run: |
+          chmod +x scripts/ci/60_package_release_fedora.sh
           scripts/ci/60_package_release_fedora.sh
           TAG_NAME="$(cat "$WORKDIR/tag-name.txt")"
           KREL="$(cat "$WORKDIR/kernel-release-export.txt")"

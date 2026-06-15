@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-KERNEL_TAG="${KERNEL_TAG:-v7.0}"
+KERNEL_TAG="${KERNEL_TAG:-v7.1-rc3}"
 GAOKUN_DIR="${GAOKUN_DIR:-$HOME/gaokun/linux-gaokun-buildbot}"
 KERN_SRC="${KERN_SRC:-$HOME/gaokun/mainline-linux}"
 KERN_OUT="${KERN_OUT:-$HOME/gaokun/kernel-out}"
@@ -93,7 +93,10 @@ ensure_source_tree() {
     configure_git_identity
 
     echo "Applying standard gaokun3 patches..."
-    git -C "$KERN_SRC" am "$GAOKUN_DIR"/patches/*.patch
+    git -C "$KERN_SRC" am "$GAOKUN_DIR"/patches/upstream/*.patch
+    git -C "$KERN_SRC" am "$GAOKUN_DIR"/patches/others/*.patch
+    git -C "$KERN_SRC" am "$GAOKUN_DIR"/patches/media/*.patch
+    git -C "$KERN_SRC" am "$GAOKUN_DIR"/patches/0099-arm64-gaokun3-import-local-dts-and-defconfig.patch
 }
 
 el2_state() {

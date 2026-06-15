@@ -1,0 +1,34 @@
+%global debug_package %{nil}
+%global _debugsource_packages 0
+
+Name:           linux-firmware-gaokun3
+Version:        @FW_VERSION@
+Release:        1%{?dist}
+Summary:        Firmware bundle for gaokun3
+License:        Redistributable, no modification permitted
+BuildArch:      noarch
+Source0:        @SOURCE_NAME@
+Conflicts:      atheros-firmware qcom-firmware
+Obsoletes:      atheros-firmware qcom-firmware
+
+%description
+Firmware bundle for Huawei MateBook E Go 2023 (gaokun3) image builds.
+
+%prep
+%setup -q -c -T
+tar -xzf %{SOURCE0}
+
+%build
+
+%install
+mkdir -p %{buildroot}
+cp -a usr %{buildroot}/
+
+%files
+/usr/lib/firmware/ath11k/*
+/usr/lib/firmware/qca/*
+/usr/lib/firmware/qcom/*
+
+%changelog
+* Sat Mar 28 2026 cool <bilibili@att.net> - @FW_VERSION@-1
+- Build gaokun3 firmware RPM

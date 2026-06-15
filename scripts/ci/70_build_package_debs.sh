@@ -26,41 +26,70 @@ DEB_TOPDIR="$WORKDIR/debbuild"
 BUILDROOT_DIR="$WORKDIR/package-buildroots"
 DEB_ARCH="arm64"
 FIRMWARE_DEB_VERSION="${FIRMWARE_DEB_VERSION:-$(date -u +%Y%m%d)-1}"
+UCM_DEB_VERSION="${UCM_DEB_VERSION:-$(date -u +%Y%m%d)-1}"
 BUILD_TIME_UTC="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
 mkdir -p "$ARTIFACT_DIR" "$DEB_TOPDIR"
 
+render_template_to_string() {
+  local template_path="$1"
+  shift
+
+  local sed_args=()
+  while [[ $# -gt 0 ]]; do
+    sed_args+=(-e "s|$1|$2|g")
+    shift 2
+  done
+
+  sed "${sed_args[@]}" "$template_path"
+}
+
 build_deb() {
-  local pkg_name="$1"
-  local stage_dir="$2"
-  local version="$3"
-  local description="$4"
-  local depends="${5:-}"
-  local arch="${6:-$DEB_ARCH}"
-  local postinst="${7:-}"
+  local template_root="$1"
+  local pkg_name="$2"
+  local stage_dir="$3"
+  local version="$4"
+  local description="$5"
+  local depends="${6:-}"
+  local arch="${7:-$DEB_ARCH}"
+  local postinst="${8:-}"
+  local postrm="${9:-}"
 
   local deb_dir="$stage_dir/DEBIAN"
   mkdir -p "$deb_dir"
-
-  cat > "$deb_dir/control" <<EOF
-Package: ${pkg_name}
-Version: ${version}
-Architecture: ${arch}
-Maintainer: cool <bilibili@att.net>
-Description: ${description}
-EOF
-
+  local depends_line=""
   if [[ -n "$depends" ]]; then
-    echo "Depends: ${depends}" >> "$deb_dir/control"
+    depends_line="Depends: ${depends}"
   fi
 
+  render_template_to_string \
+    "$template_root/DEBIAN/control.in" \
+    "@PKG_NAME@" "$pkg_name" \
+    "@PKGVER@" "$version" \
+    "@ARCH@" "$arch" \
+    "@PKG_DESC@" "$description" \
+    "@DEPENDS_LINE@" "$depends_line" >"$deb_dir/control"
+
   if [[ -n "$postinst" ]]; then
-    cat > "$deb_dir/postinst" <<POSTEOF
+    cat > "$deb_dir/postinst" <<EOF
 #!/bin/bash
 set -e
 ${postinst}
-POSTEOF
+EOF
     chmod 755 "$deb_dir/postinst"
+  fi
+
+  if [[ -n "$postrm" ]]; then
+    cat > "$deb_dir/postrm" <<EOF
+#!/bin/bash
+set -e
+${postrm}
+EOF
+    chmod 755 "$deb_dir/postrm"
+  fi
+
+  if [[ -f "$template_root/DEBIAN/triggers" ]]; then
+    install -Dm644 "$template_root/DEBIAN/triggers" "$deb_dir/triggers"
   fi
 
   dpkg-deb --build --root-owner-group "$stage_dir" "$DEB_TOPDIR/${pkg_name}_${version}_${arch}.deb"
@@ -84,9 +113,6 @@ build_kernel_variant() {
   local headers_stage="$BUILDROOT_DIR/${headers_pkg}"
   local headers_tree="$headers_stage/usr/src/linux-headers-$krel"
   local postinst_script
-  local extra_cmdline=""
-  local payload_root=""
-  local image_depends="linux-firmware-gaokun3, initramfs-tools, systemd, util-linux"
 
   rm -rf "$image_stage" "$modules_stage" "$modules_raw_stage" "$headers_stage"
   mkdir -p "$image_stage/boot" "$image_stage/usr/lib/linux-image-$krel/qcom"
@@ -102,22 +128,6 @@ build_kernel_variant() {
     "$image_stage/boot/dtb-$krel"
   install -Dm644 "$out_dir/arch/arm64/boot/dts/qcom/$dtb_name" \
     "$image_stage/usr/lib/linux-image-$krel/qcom/$dtb_name"
-  if [[ "$variant_key" == "el2" ]]; then
-    extra_cmdline="modprobe.blacklist=simpledrm"
-    payload_root="/usr/lib/gaokun3/el2/$krel"
-    install -Dm644 "$GAOKUN_DIR/tools/el2/slbounceaa64.efi" \
-      "$image_stage${payload_root}/EFI/systemd/drivers/slbounceaa64.efi"
-    install -Dm644 "$GAOKUN_DIR/tools/el2/qebspilaa64.efi" \
-      "$image_stage${payload_root}/EFI/systemd/drivers/qebspilaa64.efi"
-    install -Dm644 "$GAOKUN_DIR/tools/el2/tcblaunch.exe" \
-      "$image_stage${payload_root}/tcblaunch.exe"
-    install -Dm644 "$GAOKUN_DIR/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcadsp8280.mbn" \
-      "$image_stage${payload_root}/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcadsp8280.mbn"
-    install -Dm644 "$GAOKUN_DIR/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qccdsp8280.mbn" \
-      "$image_stage${payload_root}/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qccdsp8280.mbn"
-    install -Dm644 "$GAOKUN_DIR/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcslpi8280.mbn" \
-      "$image_stage${payload_root}/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcslpi8280.mbn"
-  fi
 
   make -C "$src_dir" O="$out_dir" ARCH=arm64 INSTALL_MOD_PATH="$modules_raw_stage" modules_install
   mv "$modules_raw_stage/lib/modules" "$modules_stage/lib/"
@@ -135,95 +145,63 @@ build_kernel_variant() {
   ln -s "../../../src/linux-headers-$krel" "$headers_stage/lib/modules/$krel/build"
   ln -s "../../../src/linux-headers-$krel" "$headers_stage/lib/modules/$krel/source"
 
-  read -r -d '' postinst_script <<EOF || true
-temp_kernel_dir=\$(mktemp -d)
-cleanup() {
-  for name in install.conf cmdline devicetree; do
-    if [ -f "\$temp_kernel_dir/\$name.orig" ]; then
-      cp "\$temp_kernel_dir/\$name.orig" "/etc/kernel/\$name"
-    else
-      rm -f "/etc/kernel/\$name"
-    fi
-  done
-  rm -rf "\$temp_kernel_dir"
-}
-trap cleanup EXIT
-mkdir -p /etc/kernel
-for name in install.conf cmdline devicetree; do
-  if [ -f "/etc/kernel/\$name" ]; then
-    cp "/etc/kernel/\$name" "\$temp_kernel_dir/\$name.orig"
-  fi
-done
-if [ -s /etc/kernel/cmdline ]; then
-  cmdline="\$(tr -s '[:space:]' ' ' </etc/kernel/cmdline)"
-else
-  cmdline="\$(tr ' ' '\n' </proc/cmdline | grep -ve '^BOOT_IMAGE=' -e '^initrd=' | tr '\n' ' ')"
-fi
-cmdline="\${cmdline%" "}"
-extra_cmdline="${extra_cmdline}"
-case " \$cmdline " in
-  *" \$extra_cmdline "*)
-    ;;
-  *)
-    if [ -n "\$extra_cmdline" ]; then
-      cmdline="\${cmdline} \$extra_cmdline"
-      cmdline="\${cmdline#" "}"
-    fi
-    ;;
-esac
-printf 'layout=bls\\n' > /etc/kernel/install.conf
-printf '%s\\n' "\$cmdline" > /etc/kernel/cmdline
-printf 'qcom/%s\\n' "$dtb_name" > /etc/kernel/devicetree
-if command -v update-initramfs >/dev/null 2>&1; then
-  update-initramfs -c -k $krel 2>/dev/null || true
-fi
-if command -v kernel-install >/dev/null 2>&1; then
-  kernel-install --entry-token=machine-id remove $krel >/dev/null 2>&1 || true
-  kernel-install --make-entry-directory=yes --entry-token=machine-id add \
-    $krel /boot/vmlinuz-$krel /boot/initrd.img-$krel >/dev/null 2>&1 || true
-fi
-payload_root="${payload_root}"
-if [ -n "\$payload_root" ] && [ -d "\$payload_root" ]; then
-  esp_path=""
-  if command -v bootctl >/dev/null 2>&1; then
-    esp_path="\$(bootctl --print-esp-path 2>/dev/null || true)"
-  fi
-  if [ -z "\$esp_path" ] && findmnt -rn --target /boot/efi >/dev/null 2>&1; then
-    esp_path="/boot/efi"
-  fi
-  if [ -n "\$esp_path" ] && findmnt -rn --target "\$esp_path" >/dev/null 2>&1; then
-    install -d "\$esp_path/EFI/systemd/drivers" \
-               "\$esp_path/firmware/qcom/sc8280xp/HUAWEI/gaokun3"
-    install -m 0644 "\$payload_root/EFI/systemd/drivers/slbounceaa64.efi" \
-      "\$esp_path/EFI/systemd/drivers/slbounceaa64.efi"
-    install -m 0644 "\$payload_root/EFI/systemd/drivers/qebspilaa64.efi" \
-      "\$esp_path/EFI/systemd/drivers/qebspilaa64.efi"
-    install -m 0644 "\$payload_root/tcblaunch.exe" \
-      "\$esp_path/tcblaunch.exe"
-    install -m 0644 "\$payload_root/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcadsp8280.mbn" \
-      "\$esp_path/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcadsp8280.mbn"
-    install -m 0644 "\$payload_root/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qccdsp8280.mbn" \
-      "\$esp_path/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qccdsp8280.mbn"
-    install -m 0644 "\$payload_root/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcslpi8280.mbn" \
-      "\$esp_path/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcslpi8280.mbn"
-  else
-    echo "warning: EL2 payload install skipped because the ESP is not mounted" >&2
-  fi
-fi
-EOF
+  local image_description
+  image_description="$(
+    render_template_to_string \
+      "$GAOKUN_DIR/packaging/deb/linux-image-gaokun3/descriptions/package.in" \
+      "@PACKAGE_KIND@" "image" \
+      "@KREL@" "$krel"
+  )"
+  postinst_script="$(
+    render_template_to_string \
+      "$GAOKUN_DIR/packaging/deb/linux-image-gaokun3/DEBIAN/postinst.in" \
+      "@DTB_NAME@" "$dtb_name" \
+      "@KREL@" "$krel"
+  )"
 
-  build_deb "$image_pkg" "$image_stage" "$deb_version" \
-    "Linux kernel image for gaokun3 (${krel})" \
-    "$image_depends" "$DEB_ARCH" \
+  build_deb "$GAOKUN_DIR/packaging/deb/linux-image-gaokun3" \
+    "$image_pkg" "$image_stage" "$deb_version" \
+    "$image_description" \
+    "linux-firmware-gaokun3" "$DEB_ARCH" \
     "$postinst_script"
 
-  build_deb "$modules_pkg" "$modules_stage" "$deb_version" \
-    "Linux kernel modules for gaokun3 (${krel})" \
-    "${image_pkg} (= $deb_version)" "$DEB_ARCH" \
-    "depmod -a $krel 2>/dev/null || true"
+  local modules_postinst
+  modules_postinst="$(
+    render_template_to_string \
+      "$GAOKUN_DIR/packaging/deb/linux-modules-gaokun3/DEBIAN/postinst.in" \
+      "@KREL@" "$krel"
+  )"
+  local modules_postrm
+  modules_postrm="$(
+    render_template_to_string \
+      "$GAOKUN_DIR/packaging/deb/linux-modules-gaokun3/DEBIAN/postrm.in" \
+      "@KREL@" "$krel"
+  )"
+  local modules_description
+  modules_description="$(
+    render_template_to_string \
+      "$GAOKUN_DIR/packaging/deb/linux-modules-gaokun3/descriptions/package.in" \
+      "@PACKAGE_KIND@" "modules" \
+      "@KREL@" "$krel"
+  )"
 
-  build_deb "$headers_pkg" "$headers_stage" "$deb_version" \
-    "Linux kernel headers for gaokun3 (${krel})" \
+  build_deb "$GAOKUN_DIR/packaging/deb/linux-modules-gaokun3" \
+    "$modules_pkg" "$modules_stage" "$deb_version" \
+    "$modules_description" \
+    "${image_pkg} (= $deb_version)" "$DEB_ARCH" \
+    "$modules_postinst" \
+    "$modules_postrm"
+
+  local headers_description
+  headers_description="$(
+    render_template_to_string \
+      "$GAOKUN_DIR/packaging/deb/linux-headers-gaokun3/descriptions/package.in" \
+      "@PACKAGE_KIND@" "headers" \
+      "@KREL@" "$krel"
+  )"
+  build_deb "$GAOKUN_DIR/packaging/deb/linux-headers-gaokun3" \
+    "$headers_pkg" "$headers_stage" "$deb_version" \
+    "$headers_description" \
     "${modules_pkg} (= $deb_version)" "$DEB_ARCH"
 
   local image_deb="${image_pkg}_${deb_version}_${DEB_ARCH}.deb"
@@ -247,29 +225,75 @@ build_firmware_package() {
   rm -rf "$firmware_stage"
   mkdir -p "$firmware_stage/lib/firmware" "$firmware_stage/etc/initramfs-tools/hooks"
   cp -a "$GAOKUN_DIR/firmware/." "$firmware_stage/lib/firmware/"
-  rm -f "$firmware_stage/lib/firmware/"*.spec.in
-  cat > "$firmware_stage/etc/initramfs-tools/hooks/gaokun3-firmware" <<'EOF'
-#!/bin/sh
-set -e
-
-. /usr/share/initramfs-tools/hook-functions
-
-copy_fw() {
-    copy_file firmware "$1" || [ "$?" -eq 1 ]
-}
-
-copy_fw /lib/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcadsp8280.mbn
-copy_fw /lib/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qccdsp8280.mbn
-copy_fw /lib/firmware/qcom/sc8280xp/HUAWEI/gaokun3/qcslpi8280.mbn
-copy_fw /lib/firmware/qcom/sc8280xp/HUAWEI/gaokun3/audioreach-tplg.bin
-EOF
+  cp "$GAOKUN_DIR/packaging/deb/linux-firmware-gaokun3/hooks/initramfs-hook.in" \
+    "$firmware_stage/etc/initramfs-tools/hooks/gaokun3-firmware"
   chmod 0755 "$firmware_stage/etc/initramfs-tools/hooks/gaokun3-firmware"
 
-  build_deb "linux-firmware-gaokun3" "$firmware_stage" "$FIRMWARE_DEB_VERSION" \
-    "Firmware bundle for Huawei MateBook E Go 2023 (gaokun3)" "" "all"
+  local firmware_description
+  firmware_description="$(
+    render_template_to_string \
+      "$GAOKUN_DIR/packaging/deb/linux-firmware-gaokun3/descriptions/package.in"
+  )"
+  build_deb "$GAOKUN_DIR/packaging/deb/linux-firmware-gaokun3" \
+    "linux-firmware-gaokun3" "$firmware_stage" "$FIRMWARE_DEB_VERSION" \
+    "$firmware_description" "" "all"
 
   cp "$DEB_TOPDIR/$firmware_deb" "$ARTIFACT_DIR/"
   FIRMWARE_DEB="$firmware_deb"
+}
+
+build_ucm_package() {
+  local ucm_stage="$BUILDROOT_DIR/alsa-ucm-gaokun3"
+  local ucm_deb="alsa-ucm-gaokun3_${UCM_DEB_VERSION}_all.deb"
+
+  rm -rf "$ucm_stage"
+  mkdir -p "$ucm_stage/usr/lib/gaokun3/audio"
+  install -Dm644 "$GAOKUN_DIR/tools/audio/sc8280xp.conf" \
+    "$ucm_stage/usr/lib/gaokun3/audio/sc8280xp.conf"
+  install -Dm644 "$GAOKUN_DIR/tools/audio/HUAWEI-GAOKUN3.conf" \
+    "$ucm_stage/usr/lib/gaokun3/audio/HUAWEI-GAOKUN3.conf"
+  cat > "$ucm_stage/usr/lib/gaokun3/audio/install-ucm-overlay" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+src_dir="/usr/lib/gaokun3/audio"
+dst_dir="/usr/share/alsa/ucm2/Qualcomm/sc8280xp"
+
+install -d "$dst_dir"
+
+install_if_changed() {
+  local src="$1"
+  local dst="$2"
+
+  if [[ -e "$dst" ]] && cmp -s "$src" "$dst"; then
+    return 0
+  fi
+
+  install -m 0644 "$src" "$dst"
+}
+
+install_if_changed "$src_dir/sc8280xp.conf" "$dst_dir/sc8280xp.conf"
+install_if_changed "$src_dir/HUAWEI-GAOKUN3.conf" "$dst_dir/HUAWEI-GAOKUN3.conf"
+EOF
+  chmod 0755 "$ucm_stage/usr/lib/gaokun3/audio/install-ucm-overlay"
+
+  local ucm_description
+  ucm_description="$(
+    render_template_to_string \
+      "$GAOKUN_DIR/packaging/deb/alsa-ucm-gaokun3/descriptions/package.in"
+  )"
+  local ucm_postinst
+  ucm_postinst="$(
+    render_template_to_string \
+      "$GAOKUN_DIR/packaging/deb/alsa-ucm-gaokun3/DEBIAN/postinst.in"
+  )"
+  build_deb "$GAOKUN_DIR/packaging/deb/alsa-ucm-gaokun3" \
+    "alsa-ucm-gaokun3" "$ucm_stage" "$UCM_DEB_VERSION" \
+    "$ucm_description" "alsa-ucm-conf" "all" \
+    "$ucm_postinst"
+
+  cp "$DEB_TOPDIR/$ucm_deb" "$ARTIFACT_DIR/"
+  UCM_DEB="$ucm_deb"
 }
 
 build_kernel_variant "standard" "" "$KERN_SRC_BASE" "$KERN_OUT" "$BASE_KREL" \
@@ -287,6 +311,7 @@ if [[ "$BUILD_EL2" == "true" ]]; then
 fi
 
 build_firmware_package
+build_ucm_package
 
 EL2_MANIFEST_BLOCK=""
 EL2_RELEASE_BLOCK=""
@@ -294,7 +319,7 @@ if [[ "$BUILD_EL2" == "true" ]]; then
   EL2_MANIFEST_BLOCK="$(cat <<EOF
 ,
     "el2": {
-      "release": "${EL2_KREL}",
+      "release": "${KREL_EL2}",
       "packages": {
         "image": "${IMAGE_DEB_EL2}",
         "modules": "${MODULES_DEB_EL2}",
@@ -329,7 +354,8 @@ cat >"$ARTIFACT_DIR/package-manifest.json" <<EOF
     }${EL2_MANIFEST_BLOCK}
   },
   "packages": {
-    "firmware": "${FIRMWARE_DEB}"
+    "firmware": "${FIRMWARE_DEB}",
+    "alsa_ucm": "${UCM_DEB}"
   }
 }
 EOF
@@ -341,6 +367,7 @@ cat >"$ARTIFACT_DIR/package-release-body.md" <<EOF
 - Kernel Tag: \`${KERNEL_TAG}\`
 - EL2 Package Set Included: \`${BUILD_EL2}\`
 - Firmware Version: \`${FIRMWARE_DEB_VERSION}\`
+- ALSA UCM Version: \`${UCM_DEB_VERSION}\`
 - Architecture: \`${DEB_ARCH}\`
 - Build Time (UTC): \`${BUILD_TIME_UTC}\`
 
@@ -351,4 +378,5 @@ cat >"$ARTIFACT_DIR/package-release-body.md" <<EOF
 - \`${HEADERS_DEB_STANDARD}\`
 ${EL2_RELEASE_BLOCK}
 - \`${FIRMWARE_DEB}\`
+- \`${UCM_DEB}\`
 EOF

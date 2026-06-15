@@ -1,0 +1,3 @@
+if [ "$1" = "configure" ] || [ "$1" = "triggered" ]; then
+    /usr/lib/gaokun3/audio/install-ucm-overlay || true
+fi

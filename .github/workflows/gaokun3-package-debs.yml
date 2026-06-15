@@ -1,4 +1,4 @@
-name: Build Gaokun3 Package DEBs
+name: Build Package - DEBs Gaokun3
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
       kernel_tag:
         description: Linux kernel tag
         required: true
-        default: "v7.0"
+        default: "v7.1-rc3"
       build_el2:
         description: Build extra -gaokun3-el2 kernel packages
         required: true
@@ -97,10 +97,12 @@ jobs:
         run: |
           set -euxo pipefail
           mkdir -p "$WORKDIR" "$ARTIFACT_DIR"
+          chmod +x scripts/ci/20_build_kernel_variants.sh
           scripts/ci/20_build_kernel_variants.sh
 
       - name: Build DEB packages
         run: |
+          chmod +x scripts/ci/70_build_package_debs.sh
           scripts/ci/70_build_package_debs.sh
 
       - name: Upload build artifacts (workflow)

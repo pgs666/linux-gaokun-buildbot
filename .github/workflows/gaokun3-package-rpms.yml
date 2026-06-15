@@ -1,4 +1,4 @@
-name: Build Gaokun3 Package RPMs
+name: Build Package - RPMs Gaokun3
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
       kernel_tag:
         description: Linux kernel tag
         required: true
-        default: "v7.0"
+        default: "v7.1-rc3"
       build_el2:
         description: Build extra -gaokun3-el2 kernel packages
         required: true
@@ -97,6 +97,7 @@ jobs:
         run: |
           set -euxo pipefail
           mkdir -p "$WORKDIR" "$ARTIFACT_DIR"
+          chmod +x scripts/ci/20_build_kernel_variants.sh
           scripts/ci/20_build_kernel_variants.sh
 
       - name: Build RPM packages
@@ -119,6 +120,7 @@ jobs:
             "fedora:44" \
             bash -euxo pipefail -c '
               dnf -y install gcc make rpm-build kmod elfutils-libelf-devel tar gzip rsync
+              chmod +x scripts/ci/70_build_package_rpms.sh
               scripts/ci/70_build_package_rpms.sh
             '
 

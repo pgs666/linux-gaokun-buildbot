@@ -1,0 +1,6 @@
+Package: @PKG_NAME@
+Version: @PKGVER@
+Architecture: all
+Maintainer: cool <bilibili@att.net>
+Depends: alsa-ucm-conf
+Description: @PKG_DESC@
