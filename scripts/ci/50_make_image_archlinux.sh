@@ -144,7 +144,7 @@ cat > /etc/mkinitcpio.conf <<'EOF'
 MODULES=(btrfs nvme phy_qcom_qmp_pcie phy_qcom_qmp_combo phy_qcom_qmp_usb phy_qcom_snps_femto_v2 usb_storage uas typec pci_pwrctrl_pwrseq ath11k ath11k_pci i2c_hid_of)
 BINARIES=()
 FILES=()
-HOOKS=(base systemd autodetect modconf block filesystems keyboard fsck gaokun3-firmware)
+HOOKS=(base systemd modconf block filesystems keyboard fsck gaokun3-firmware)
 COMPRESSION="zstd"
 EOF
 
