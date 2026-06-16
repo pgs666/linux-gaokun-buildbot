@@ -62,6 +62,9 @@ sudo mount -o subvol=@var "${LOOP}p2" "$MNT/var"
 sudo mkdir -p "$MNT/boot/efi"
 sudo mount "${LOOP}p1" "$MNT/boot/efi"
 
+# Clean pacman cache before rsync to save space
+sudo rm -rf "$ROOTFS_DIR/var/cache/pacman/pkg/"*
+
 sudo rsync -aHAX "$ROOTFS_DIR/" "$MNT/"
 install_common_image_assets "$MNT" "$GAOKUN_DIR"
 
