@@ -53,7 +53,7 @@ jobs:
       DESKTOP_ENVIRONMENT: ${{ github.event.inputs.desktop_environment }}
       EXTRA_PACKAGES: ${{ github.event.inputs.extra_packages }}
       BUILD_EL2: ${{ github.event.inputs.build_el2 }}
-      IMAGE_SIZE: 8G
+      IMAGE_SIZE: 10G
       IMAGE_CHUNK_SIZE: 1900M
       GAOKUN_DIR: ${{ github.workspace }}
       WORKDIR: ${{ github.workspace }}/build-archlinux
