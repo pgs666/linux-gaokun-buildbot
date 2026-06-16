@@ -1,4 +1,4 @@
-name: Build Kubuntu Gaokun3 Image
+name: Build Kubuntu Image - Gaokun3
 
 on:
   workflow_dispatch:

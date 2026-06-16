@@ -1,4 +1,4 @@
-name: Build Fedora GNOME Gaokun3 Image
+name: Build Fedora GNOME Image - Gaokun3
 
 on:
   workflow_dispatch:
