@@ -1,4 +1,4 @@
-name: Build Arch Linux ARM Gaokun3 Image
+name: Build Arch Image - Gaokun3
 
 on:
   workflow_dispatch:

@@ -1,4 +1,4 @@
-name: Build Package - DEBs Gaokun3
+name: Build DEB Packages - Gaokun3
 
 on:
   workflow_dispatch:

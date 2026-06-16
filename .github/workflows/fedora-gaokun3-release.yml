@@ -1,4 +1,4 @@
-name: Build Image - Fedora Gaokun3
+name: Build Fedora Image - Gaokun3
 
 on:
   workflow_dispatch:

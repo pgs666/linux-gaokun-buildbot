@@ -1,4 +1,4 @@
-name: Build Package - RPMs Gaokun3
+name: Build RPM Packages - Gaokun3
 
 on:
   workflow_dispatch:

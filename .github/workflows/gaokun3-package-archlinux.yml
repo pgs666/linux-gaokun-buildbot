@@ -1,4 +1,4 @@
-name: Build Gaokun3 Arch Linux ARM Packages
+name: Build Arch Packages - Gaokun3
 
 on:
   workflow_dispatch:

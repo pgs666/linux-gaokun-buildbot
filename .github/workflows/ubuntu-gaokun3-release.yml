@@ -1,4 +1,4 @@
-name: Build Image - Ubuntu Gaokun3
+name: Build Ubuntu Image - Gaokun3
 
 on:
   workflow_dispatch:
