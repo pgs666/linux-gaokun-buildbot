@@ -70,6 +70,7 @@ else
   split -b "$IMAGE_CHUNK_SIZE" -d -a 3 \
     "$ZST_FILE" \
     "$ZST_FILE.part-"
+  rm "$ZST_FILE"
   PACKAGE_GLOB="${IMAGE_BASENAME}.zst.part-*"
   cat > "$RELEASE_BODY_FILE" <<EOF
 ## Build Information
