@@ -89,8 +89,9 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.ccache
-          key: gaokun3-packages-arch-ccache-${{ env.KERNEL_TAG }}-${{ env.BUILD_EL2 }}-${{ hashFiles('patches/*.patch', 'patches/el2/*.patch', 'defconfig/**', 'dts/**', 'drivers/**', 'packaging/**', 'firmware/**', 'scripts/ci/*.sh', '.github/workflows/gaokun3-package-archlinux.yml') }}
+          key: gaokun3-packages-arch-ccache-${{ env.KERNEL_TAG }}-${{ env.BUILD_EL2 }}-${{ hashFiles('patches/**/*.patch', 'defconfig/**', 'dts/**', 'drivers/**', 'packaging/**', 'firmware/**', 'scripts/ci/*.sh', '.github/workflows/gaokun3-package-archlinux.yml') }}
           restore-keys: |
+            gaokun3-packages-arch-ccache-${{ env.KERNEL_TAG }}-${{ env.BUILD_EL2 }}-
             gaokun3-packages-arch-ccache-${{ env.KERNEL_TAG }}-
             gaokun3-packages-arch-ccache-
 
@@ -98,7 +99,9 @@ jobs:
         run: |
           set -euxo pipefail
           mkdir -p "$WORKDIR" "$ARTIFACT_DIR"
+          ccache -z || true
           scripts/ci/20_build_kernel_variants.sh
+          ccache -s || true
 
       - name: Build Arch Linux ARM packages
         run: |

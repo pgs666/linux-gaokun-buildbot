@@ -88,8 +88,9 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.ccache
-          key: gaokun3-packages-deb-ccache-${{ env.KERNEL_TAG }}-${{ env.BUILD_EL2 }}-${{ hashFiles('patches/*.patch', 'patches/el2/*.patch', 'defconfig/**', 'dts/**', 'drivers/**', 'packaging/**', 'firmware/**', 'scripts/ci/*.sh', '.github/workflows/gaokun3-package-debs.yml') }}
+          key: gaokun3-packages-deb-ccache-${{ env.KERNEL_TAG }}-${{ env.BUILD_EL2 }}-${{ hashFiles('patches/**/*.patch', 'defconfig/**', 'dts/**', 'drivers/**', 'packaging/**', 'firmware/**', 'scripts/ci/*.sh', '.github/workflows/gaokun3-package-debs.yml') }}
           restore-keys: |
+            gaokun3-packages-deb-ccache-${{ env.KERNEL_TAG }}-${{ env.BUILD_EL2 }}-
             gaokun3-packages-deb-ccache-${{ env.KERNEL_TAG }}-
             gaokun3-packages-deb-ccache-
 
@@ -98,7 +99,9 @@ jobs:
           set -euxo pipefail
           mkdir -p "$WORKDIR" "$ARTIFACT_DIR"
           chmod +x scripts/ci/20_build_kernel_variants.sh
+          ccache -z || true
           scripts/ci/20_build_kernel_variants.sh
+          ccache -s || true
 
       - name: Build DEB packages
         run: |
