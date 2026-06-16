@@ -72,7 +72,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             rsync kmod curl jq \
-            parted dosfstools e2fsprogs btrfs-progs zstd xz-utils \
+            parted dosfstools e2fsprogs btrfs-progs zstd xz-utils p7zip-full \
             python3 libarchive-tools
 
       - name: Prepare build workspace

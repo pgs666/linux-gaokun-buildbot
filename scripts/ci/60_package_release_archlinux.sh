@@ -13,15 +13,19 @@ set -euo pipefail
 KREL="$(cat "$WORKDIR/kernel-release.txt")"
 BUILD_EL2="${BUILD_EL2:-false}"
 EL2_KREL=""
+GITHUB_RELEASE_ASSET_MAX_BYTES=$((2 * 1024 * 1024 * 1024 - 1))
 if [[ "$BUILD_EL2" == "true" && -f "$WORKDIR/kernel-release-el2.txt" ]]; then
   EL2_KREL="$(cat "$WORKDIR/kernel-release-el2.txt")"
 fi
+
 IMAGE_BASENAME="$(basename "$IMAGE_FILE")"
 ZST_FILE="$ARTIFACT_DIR/${IMAGE_BASENAME}.zst"
+SEVENZ_FILE="$ARTIFACT_DIR/${IMAGE_BASENAME}.7z"
 RELEASE_BODY_FILE="$ARTIFACT_DIR/release-body.md"
-SPLIT_THRESHOLD_BYTES=$((1900 * 1024 * 1024))
+
 EL2_RELEASE_BLOCK=""
 EL2_PAYLOAD_BLOCK=""
+EXTRACTION_BLOCK=""
 if [[ "$BUILD_EL2" == "true" && -n "$EL2_KREL" ]]; then
   EL2_RELEASE_BLOCK="$(cat <<EOF
 - Optional EL2 Kernel Release: \`${EL2_KREL}\`
@@ -38,75 +42,52 @@ fi
 cp "$IMAGE_FILE" "$ARTIFACT_DIR/"
 zstd -T0 -19 "$ARTIFACT_DIR/$IMAGE_BASENAME" -o "$ZST_FILE"
 
-if [ "$(stat -c '%s' "$ZST_FILE")" -lt "$SPLIT_THRESHOLD_BYTES" ]; then
-  PACKAGE_GLOB="${IMAGE_BASENAME}.zst"
-  cat > "$RELEASE_BODY_FILE" <<EOF
-## Build Information
-
-- Distribution: \`Arch Linux ARM\`
-- Rootfs Tarball Source: \`${ARCH_MIRROR_URL}/os/ArchLinuxARM-aarch64-latest.tar.gz\`
-- Kernel Tag: \`${KERNEL_TAG}\`
-- Kernel Release: \`${KREL}\`
-- Architecture: \`aarch64\`
-${EL2_RELEASE_BLOCK}
-- Root Filesystem: \`Btrfs (@, @home, @var)\`
-- Bootloader: \`systemd-boot\`
-- Image File: \`${IMAGE_BASENAME}\`
-- Compressed File: \`${IMAGE_BASENAME}.zst\`
-- Build Time (UTC): \`$(date -u +"%Y-%m-%dT%H:%M:%SZ")\`
-
-## Rootfs Selection
-
-- Desktop Environment: \`${DESKTOP_ENVIRONMENT}\`
-- Extra Packages: \`${EXTRA_PACKAGES}\`
-
-## Default Login
-
-- Username: \`user\`
-- Password: \`user\`
-${EL2_PAYLOAD_BLOCK}
-EOF
-else
-  split -b "$IMAGE_CHUNK_SIZE" -d -a 3 \
-    "$ZST_FILE" \
-    "$ZST_FILE.part-"
-  rm "$ZST_FILE"
-  PACKAGE_GLOB="${IMAGE_BASENAME}.zst.part-*"
-  cat > "$RELEASE_BODY_FILE" <<EOF
-## Build Information
-
-- Distribution: \`Arch Linux ARM\`
-- Rootfs Tarball Source: \`${ARCH_MIRROR_URL}/os/ArchLinuxARM-aarch64-latest.tar.gz\`
-- Kernel Tag: \`${KERNEL_TAG}\`
-- Kernel Release: \`${KREL}\`
-- Architecture: \`aarch64\`
-${EL2_RELEASE_BLOCK}
-- Root Filesystem: \`Btrfs (@, @home, @var)\`
-- Bootloader: \`systemd-boot\`
-- Image File: \`${IMAGE_BASENAME}\`
-- Compressed File: \`${IMAGE_BASENAME}.zst\`
-- Build Time (UTC): \`$(date -u +"%Y-%m-%dT%H:%M:%SZ")\`
-
-## Rootfs Selection
-
-- Desktop Environment: \`${DESKTOP_ENVIRONMENT}\`
-- Extra Packages: \`${EXTRA_PACKAGES}\`
-
-## Default Login
-
-- Username: \`user\`
-- Password: \`user\`
-
-${EL2_PAYLOAD_BLOCK}
-
-## Reassemble And Decompress
+PACKAGE_FILE="$ZST_FILE"
+PACKAGE_GLOB="${IMAGE_BASENAME}.zst"
+if [ "$(stat -c '%s' "$ZST_FILE")" -gt "$GITHUB_RELEASE_ASSET_MAX_BYTES" ]; then
+  rm -f "$ZST_FILE"
+  7z a -t7z -mx=9 -m0=lzma2 -v"$IMAGE_CHUNK_SIZE" "$SEVENZ_FILE" "$ARTIFACT_DIR/$IMAGE_BASENAME"
+  PACKAGE_FILE="$SEVENZ_FILE.001"
+  PACKAGE_GLOB="${IMAGE_BASENAME}.7z.0*"
+  EXTRACTION_BLOCK="## Extraction
 
 \`\`\`bash
-cat ${IMAGE_BASENAME}.zst.part-* > ${IMAGE_BASENAME}.zst
-zstd -d ${IMAGE_BASENAME}.zst -o ${IMAGE_BASENAME}
+7z x ${IMAGE_BASENAME}.7z.001
 \`\`\`
-EOF
+"
 fi
+
+rm -f "$ARTIFACT_DIR/$IMAGE_BASENAME"
+
+COMPRESSED_BASENAME="$(basename "$PACKAGE_FILE")"
+cat > "$RELEASE_BODY_FILE" <<EOF
+## Build Information
+
+- Distribution: \`Arch Linux ARM\`
+- Rootfs Tarball Source: \`${ARCH_MIRROR_URL}/os/ArchLinuxARM-aarch64-latest.tar.gz\`
+- Kernel Tag: \`${KERNEL_TAG}\`
+- Kernel Release: \`${KREL}\`
+- Architecture: \`aarch64\`
+${EL2_RELEASE_BLOCK}
+- Root Filesystem: \`Btrfs (@, @home, @var)\`
+- Bootloader: \`systemd-boot\`
+- Image File: \`${IMAGE_BASENAME}\`
+- Compressed File: \`${COMPRESSED_BASENAME}\`
+- Build Time (UTC): \`$(date -u +"%Y-%m-%dT%H:%M:%SZ")\`
+
+## Rootfs Selection
+
+- Desktop Environment: \`${DESKTOP_ENVIRONMENT}\`
+- Extra Packages: \`${EXTRA_PACKAGES}\`
+
+## Default Login
+
+- Username: \`user\`
+- Password: \`user\`
+${EL2_PAYLOAD_BLOCK}
+
+${EXTRACTION_BLOCK}
+EOF
 
 sudo chown "$(id -u):$(id -g)" "$RELEASE_BODY_FILE"
 
