@@ -33,7 +33,7 @@ KERN_SRC="$KERN_SRC" GAOKUN_ANDROID_DIR="$GAOKUN_ANDROID_DIR" \
     "$GAOKUN_DIR/scripts/ci/25_prepare_android_kernel.sh"
 
 mkdir -p "$KERN_OUT" "$ARTIFACT_DIR"
-make -C "$KERN_SRC" O="$KERN_OUT" ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" gaokun3_defconfig
+cp "$GAOKUN_DIR/defconfig/gaokun3_android.config" "$KERN_OUT/.config"
 
 (
     cd "$KERN_SRC"
