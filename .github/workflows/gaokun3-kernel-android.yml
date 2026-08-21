@@ -1,0 +1,90 @@
+name: Build Android Kernel - Gaokun3
+
+on:
+  push:
+    branches:
+      - 'android/**'
+    paths:
+      - '.github/workflows/gaokun3-kernel-android.yml'
+      - 'defconfig/**'
+      - 'drivers/touchscreen-hx83121a/**'
+      - 'patches/**'
+      - 'scripts/ci/25_prepare_android_kernel.sh'
+      - 'scripts/ci/30_build_android_kernel.sh'
+  pull_request:
+    paths:
+      - '.github/workflows/gaokun3-kernel-android.yml'
+      - 'defconfig/**'
+      - 'drivers/touchscreen-hx83121a/**'
+      - 'patches/**'
+      - 'scripts/ci/25_prepare_android_kernel.sh'
+      - 'scripts/ci/30_build_android_kernel.sh'
+  workflow_dispatch:
+    inputs:
+      kernel_tag:
+        description: Linux kernel tag
+        required: true
+        default: "v7.2-rc2"
+
+permissions:
+  contents: read
+
+jobs:
+  build-android-kernel:
+    runs-on: ubuntu-latest
+    env:
+      KERNEL_TAG: ${{ inputs.kernel_tag || github.event.inputs.kernel_tag || 'v7.2-rc2' }}
+      GAOKUN_DIR: ${{ github.workspace }}
+      GAOKUN_ANDROID_DIR: ${{ github.workspace }}/build-android/gaokun-android
+      KERN_SRC: ${{ github.workspace }}/build-android/mainline-linux
+      KERN_OUT: ${{ github.workspace }}/build-android/kernel-out
+      ARTIFACT_DIR: ${{ github.workspace }}/build-android/artifacts
+
+    steps:
+      - name: Checkout buildbot
+        uses: actions/checkout@v6
+
+      - name: Checkout Linux source
+        uses: actions/checkout@v6
+        with:
+          repository: torvalds/linux
+          ref: ${{ env.KERNEL_TAG }}
+          fetch-depth: 1
+          path: build-android/mainline-linux
+
+      - name: Checkout pinned gaokun-android inputs
+        uses: actions/checkout@v6
+        with:
+          repository: vahiru/gaokun-android
+          ref: 844045acae7f6b845d7048845fce9305d76b37bd
+          path: build-android/gaokun-android
+
+      - name: Install host dependencies
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            git make gcc bc bison flex cpio rsync kmod curl \
+            libssl-dev libelf-dev dwarves ccache \
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
+
+      - name: Restore ccache
+        uses: actions/cache@v5
+        with:
+          path: ~/.ccache
+          key: gaokun3-android-ccache-${{ env.KERNEL_TAG }}-${{ hashFiles('patches/**', 'defconfig/**', 'drivers/**', 'scripts/ci/*android*') }}
+          restore-keys: |
+            gaokun3-android-ccache-${{ env.KERNEL_TAG }}-
+            gaokun3-android-ccache-
+
+      - name: Build Android kernel
+        run: |
+          chmod +x scripts/ci/25_prepare_android_kernel.sh scripts/ci/30_build_android_kernel.sh
+          scripts/ci/30_build_android_kernel.sh
+
+      - name: Upload Android kernel artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: gaokun3-android-kernel-${{ env.KERNEL_TAG }}
+          path: build-android/artifacts/
+          if-no-files-found: error
