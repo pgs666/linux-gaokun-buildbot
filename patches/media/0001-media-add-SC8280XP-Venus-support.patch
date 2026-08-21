@@ -1,0 +1,537 @@
+From f197593ea730da161d518c21413283138d5579c7 Mon Sep 17 00:00:00 2001
+From: pgs666 <74764545+pgs666@users.noreply.github.com>
+Date: Fri, 21 Aug 2026 20:47:24 +0800
+Subject: [PATCH] media: add SC8280XP Venus support
+
+Port the functional parts of the right-0903/linux-gaokun Venus series to Linux v7.2-rc2. Skip the obsolete of_match formatting cleanup, use the SC8280XP resource compatible, and enable Venus on gaokun3 with its platform firmware.
+
+Based-on-patches-by: Johan Hovold <johan+linaro@kernel.org>
+Based-on-patches-by: Konrad Dybcio <konradybcio@kernel.org>
+---
+ .../bindings/media/qcom,sm8350-venus.yaml     | 149 ++++++++++++++++++
+ .../boot/dts/qcom/sc8280xp-huawei-gaokun3.dts |   5 +
+ arch/arm64/boot/dts/qcom/sc8280xp.dtsi        |  86 ++++++++++
+ drivers/media/platform/qcom/venus/core.c      | 102 ++++++++++++
+ drivers/media/platform/qcom/venus/core.h      |   4 +
+ drivers/media/platform/qcom/venus/hfi_venus.c |  15 +-
+ .../media/platform/qcom/venus/pm_helpers.c    |   3 +
+ 7 files changed, 361 insertions(+), 3 deletions(-)
+ create mode 100644 Documentation/devicetree/bindings/media/qcom,sm8350-venus.yaml
+
+diff --git a/Documentation/devicetree/bindings/media/qcom,sm8350-venus.yaml b/Documentation/devicetree/bindings/media/qcom,sm8350-venus.yaml
+new file mode 100644
+index 000000000..8a31bce27
+--- /dev/null
++++ b/Documentation/devicetree/bindings/media/qcom,sm8350-venus.yaml
+@@ -0,0 +1,149 @@
++# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
++%YAML 1.2
++---
++$id: http://devicetree.org/schemas/media/qcom,sm8350-venus.yaml#
++$schema: http://devicetree.org/meta-schemas/core.yaml#
++
++title: Qualcomm SM8350 Venus video encode and decode accelerators
++
++maintainers:
++  - Konrad Dybcio <konradybcio@kernel.org>
++
++description: |
++  The Venus Iris2 IP is a video encode and decode accelerator present
++  on Qualcomm platforms
++
++allOf:
++  - $ref: qcom,venus-common.yaml#
++
++properties:
++  compatible:
++    enum:
++      - qcom,sc8280xp-venus
++      - qcom,sm8350-venus
++
++  clocks:
++    maxItems: 3
++
++  clock-names:
++    items:
++      - const: iface
++      - const: core
++      - const: vcodec0_core
++
++  resets:
++    maxItems: 1
++
++  reset-names:
++    items:
++      - const: core
++
++  power-domains:
++    maxItems: 3
++
++  power-domain-names:
++    items:
++      - const: venus
++      - const: vcodec0
++      - const: mx
++
++  interconnects:
++    maxItems: 3
++
++  interconnect-names:
++    items:
++      - const: cpu-cfg
++      - const: video-mem
++      - const: video-llcc
++
++  operating-points-v2: true
++  opp-table:
++    type: object
++
++  iommus:
++    maxItems: 1
++
++  video-decoder:
++    type: object
++
++    properties:
++      compatible:
++        const: venus-decoder
++
++    required:
++      - compatible
++
++    additionalProperties: false
++
++  video-encoder:
++    type: object
++
++    properties:
++      compatible:
++        const: venus-encoder
++
++    required:
++      - compatible
++
++    additionalProperties: false
++
++required:
++  - compatible
++  - power-domain-names
++  - iommus
++  - video-decoder
++  - video-encoder
++
++unevaluatedProperties: false
++
++examples:
++  - |
++    #include <dt-bindings/interrupt-controller/arm-gic.h>
++    #include <dt-bindings/clock/qcom,gcc-sm8350.h>
++    #include <dt-bindings/clock/qcom,sm8350-videocc.h>
++    #include <dt-bindings/interconnect/qcom,sm8350.h>
++    #include <dt-bindings/power/qcom-rpmpd.h>
++
++    venus: video-codec@aa00000 {
++        compatible = "qcom,sm8350-venus";
++        reg = <0x0aa00000 0x100000>;
++        interrupts = <GIC_SPI 174 IRQ_TYPE_LEVEL_HIGH>;
++
++        clocks = <&gcc GCC_VIDEO_AXI0_CLK>,
++                 <&videocc VIDEO_CC_MVS0C_CLK>,
++                 <&videocc VIDEO_CC_MVS0_CLK>;
++        clock-names = "iface",
++                      "core",
++                      "vcodec0_core";
++
++        resets = <&gcc GCC_VIDEO_AXI0_CLK_ARES>;
++        reset-names = "core";
++
++        power-domains = <&videocc MVS0C_GDSC>,
++                        <&videocc MVS0_GDSC>,
++                        <&rpmhpd SM8350_MX>;
++        power-domain-names = "venus",
++                             "vcodec0",
++                             "mx";
++
++        interconnects = <&gem_noc MASTER_APPSS_PROC 0 &config_noc SLAVE_VENUS_CFG 0>,
++                        <&mmss_noc MASTER_VIDEO_P0 0 &mc_virt SLAVE_EBI1 0>,
++                        <&mmss_noc MASTER_VIDEO_P0 0 &gem_noc SLAVE_LLCC 0>;
++        interconnect-names = "cpu-cfg",
++                             "video-mem",
++                             "video-llcc";
++
++        operating-points-v2 = <&venus_opp_table>;
++        iommus = <&apps_smmu 0x2100 0x400>;
++        memory-region = <&pil_video_mem>;
++
++        status = "disabled";
++
++        video-decoder {
++            compatible = "venus-decoder";
++        };
++
++        video-encoder {
++            compatible = "venus-encoder";
++        };
++    };
+diff --git a/arch/arm64/boot/dts/qcom/sc8280xp-huawei-gaokun3.dts b/arch/arm64/boot/dts/qcom/sc8280xp-huawei-gaokun3.dts
+index f3c00be67..ef63ff595 100644
+--- a/arch/arm64/boot/dts/qcom/sc8280xp-huawei-gaokun3.dts
++++ b/arch/arm64/boot/dts/qcom/sc8280xp-huawei-gaokun3.dts
+@@ -1263,6 +1263,11 @@ &vamacro {
+ 	status = "okay";
+ };
+ 
++&venus {
++	firmware-name = "qcom/sc8280xp/HUAWEI/gaokun3/qcvss8280.mbn";
++	status = "okay";
++};
++
+ &wsamacro {
+ 	status = "okay";
+ };
+diff --git a/arch/arm64/boot/dts/qcom/sc8280xp.dtsi b/arch/arm64/boot/dts/qcom/sc8280xp.dtsi
+index b563abb4c..f44c27321 100644
+--- a/arch/arm64/boot/dts/qcom/sc8280xp.dtsi
++++ b/arch/arm64/boot/dts/qcom/sc8280xp.dtsi
+@@ -11,6 +11,7 @@
+ #include <dt-bindings/clock/qcom,rpmh.h>
+ #include <dt-bindings/clock/qcom,sc8280xp-camcc.h>
+ #include <dt-bindings/clock/qcom,sc8280xp-lpasscc.h>
++#include <dt-bindings/clock/qcom,sm8350-videocc.h>
+ #include <dt-bindings/dma/qcom-gpi.h>
+ #include <dt-bindings/firmware/qcom,scm.h>
+ #include <dt-bindings/interconnect/qcom,osm-l3.h>
+@@ -698,6 +699,11 @@ reserved-region@85b00000 {
+ 			no-map;
+ 		};
+ 
++		pil_video_mem: pil_video_region@86700000 {
++			reg = <0 0x86700000 0 0x500000>;
++			no-map;
++		};
++
+ 		pil_gpu_mem: gpu-mem@8bf00000 {
+ 			reg = <0 0x8bf00000 0 0x2000>;
+ 			no-map;
+@@ -4218,6 +4224,86 @@ usb_1_dwc3_ss: endpoint {
+ 			};
+ 		};
+ 
++		venus: video-codec@aa00000 {
++			compatible = "qcom,sc8280xp-venus";
++			reg = <0 0x0aa00000 0 0x100000>;
++			interrupts = <GIC_SPI 174 IRQ_TYPE_LEVEL_HIGH>;
++
++			clocks = <&gcc GCC_VIDEO_AXI0_CLK>,
++				 <&videocc VIDEO_CC_MVS0C_CLK>,
++				 <&videocc VIDEO_CC_MVS0_CLK>;
++			clock-names = "iface",
++				      "core",
++				      "vcodec0_core";
++			power-domains = <&videocc MVS0C_GDSC>,
++					<&videocc MVS0_GDSC>,
++					<&rpmhpd SC8280XP_MX>;
++			power-domain-names = "venus",
++					     "vcodec0",
++					     "mx";
++
++			resets = <&gcc GCC_VIDEO_AXI0_CLK_ARES>;
++			reset-names = "core";
++
++			interconnects = <&gem_noc MASTER_APPSS_PROC 0 &config_noc SLAVE_VENUS_CFG 0>,
++					<&mmss_noc MASTER_VIDEO_P0 0 &mc_virt SLAVE_EBI1 0>,
++					<&mmss_noc MASTER_VIDEO_P0 0 &gem_noc SLAVE_LLCC 0>;
++			interconnect-names = "cpu-cfg",
++					     "video-mem",
++					     "video-llcc";
++
++			operating-points-v2 = <&venus_opp_table>;
++			iommus = <&apps_smmu 0x2e00 0x400>;
++			memory-region = <&pil_video_mem>;
++
++			status = "disabled";
++
++			video-decoder {
++				compatible = "venus-decoder";
++			};
++
++			video-encoder {
++				compatible = "venus-encoder";
++			};
++
++			venus_opp_table: opp-table {
++				compatible = "operating-points-v2";
++
++				opp-720000000 {
++					opp-hz = /bits/ 64 <720000000>;
++					required-opps = <&rpmhpd_opp_low_svs>;
++				};
++
++				opp-1014000000 {
++					opp-hz = /bits/ 64 <1014000000>;
++					required-opps = <&rpmhpd_opp_svs>;
++				};
++
++				opp-1098000000 {
++					opp-hz = /bits/ 64 <1098000000>;
++					required-opps = <&rpmhpd_opp_svs_l1>;
++				};
++
++				opp-1332000000 {
++					opp-hz = /bits/ 64 <1332000000>;
++					required-opps = <&rpmhpd_opp_nom>;
++				};
++			};
++		};
++
++		videocc: clock-controller@abf0000 {
++			compatible = "qcom,sc8280xp-videocc";
++			reg = <0 0x0abf0000 0 0x10000>;
++			clocks = <&rpmhcc RPMH_CXO_CLK>,
++				 <&rpmhcc RPMH_CXO_CLK_A>,
++				 <&sleep_clk>;
++			power-domains = <&rpmhpd SC8280XP_MMCX>;
++			required-opps = <&rpmhpd_opp_low_svs>;
++			#clock-cells = <1>;
++			#reset-cells = <1>;
++			#power-domain-cells = <1>;
++		};
++
+ 		cci0: cci@ac4a000 {
+ 			compatible = "qcom,sc8280xp-cci", "qcom,msm8996-cci";
+ 			reg = <0 0x0ac4a000 0 0x1000>;
+diff --git a/drivers/media/platform/qcom/venus/core.c b/drivers/media/platform/qcom/venus/core.c
+index 243e342b0..a23883fad 100644
+--- a/drivers/media/platform/qcom/venus/core.c
++++ b/drivers/media/platform/qcom/venus/core.c
+@@ -401,6 +401,15 @@ static int venus_probe(struct platform_device *pdev)
+ 	if (IS_ERR(core->cpucfg_path))
+ 		return PTR_ERR(core->cpucfg_path);
+ 
++	core->llcc_path = devm_of_icc_get(dev, "video-llcc");
++	if (IS_ERR(core->llcc_path)) {
++		/* LLCC path is optional */
++		if (PTR_ERR(core->llcc_path) == -ENODATA)
++			core->llcc_path = NULL;
++		else
++			return PTR_ERR(core->llcc_path);
++	}
++
+ 	core->irq = platform_get_irq(pdev, 0);
+ 	if (core->irq < 0)
+ 		return core->irq;
+@@ -597,12 +606,18 @@ static __maybe_unused int venus_runtime_suspend(struct device *dev)
+ 	if (ret)
+ 		goto err_cpucfg_path;
+ 
++	ret = icc_set_bw(core->llcc_path, 0, 0);
++	if (ret)
++		goto err_llcc_path;
++
+ 	ret = icc_set_bw(core->video_path, 0, 0);
+ 	if (ret)
+ 		goto err_video_path;
+ 
+ 	return ret;
+ 
++err_llcc_path:
++	icc_set_bw(core->video_path, kbps_to_icc(20000), 0);
+ err_video_path:
+ 	icc_set_bw(core->cpucfg_path, kbps_to_icc(1000), 0);
+ err_cpucfg_path:
+@@ -642,6 +657,10 @@ static __maybe_unused int venus_runtime_resume(struct device *dev)
+ 	if (ret)
+ 		return ret;
+ 
++	ret = icc_set_bw(core->llcc_path, kbps_to_icc(20000), 0);
++	if (ret)
++		return ret;
++
+ 	ret = icc_set_bw(core->cpucfg_path, kbps_to_icc(1000), 0);
+ 	if (ret)
+ 		return ret;
+@@ -1054,6 +1073,44 @@ static const struct venus_resources sm8250_res = {
+ 	.enc_nodename = "video-encoder",
+ };
+ 
++static const struct reg_val sm8350_reg_preset[] = {
++	{ 0xb0088, 0, 0x11 },
++};
++
++static const struct venus_resources sm8350_res = {
++	.freq_tbl = sm8250_freq_table,
++	.freq_tbl_size = ARRAY_SIZE(sm8250_freq_table),
++	.reg_tbl = sm8350_reg_preset,
++	.reg_tbl_size = ARRAY_SIZE(sm8350_reg_preset),
++	.bw_tbl_enc = sm8250_bw_table_enc,
++	.bw_tbl_enc_size = ARRAY_SIZE(sm8250_bw_table_enc),
++	.bw_tbl_dec = sm8250_bw_table_dec,
++	.bw_tbl_dec_size = ARRAY_SIZE(sm8250_bw_table_dec),
++	.clks = { "core", "iface" },
++	.clks_num = 2,
++	.resets = { "core" },
++	.resets_num = 1,
++	.vcodec0_clks = { "vcodec0_core" },
++	.vcodec_clks_num = 1,
++	.vcodec_pmdomains = (const char *[]) { "venus", "vcodec0" },
++	.vcodec_pmdomains_num = 2,
++	.opp_pmdomain = (const char *[]) { "mx", NULL },
++	.vcodec_num = 1,
++	.max_load = 7833600, /* 7680x4320@60fps */
++	.hfi_version = HFI_VERSION_6XX,
++	.vpu_version = VPU_VERSION_IRIS2,
++	.num_vpp_pipes = 4,
++	.vmem_id = VIDC_RESOURCE_NONE,
++	.vmem_size = 0,
++	.vmem_addr = 0,
++	.dma_mask = GENMASK(31, 29) - 1,
++	.cp_start = 0,
++	.cp_size = 0x25800000,
++	.cp_nonpixel_start = 0x1000000,
++	.cp_nonpixel_size = 0x24800000,
++	.fwname = "qcom/vpu-2.0/venus.mbn",
++};
++
+ static const struct freq_tbl sc7280_freq_table[] = {
+ 	{ 0, 460000000 },
+ 	{ 0, 424000000 },
+@@ -1120,6 +1177,49 @@ static const struct venus_resources sc7280_res = {
+ };
+ #endif
+ 
++static const struct freq_tbl sc8280xp_freq_table[] = {
++	{ 0, 239999999 },
++	{ 0, 338000000 },
++	{ 0, 366000000 },
++	{ 0, 444000000 },
++	{ 0, 533000000 },
++	{ 0, 560000000 },
++};
++
++static const struct venus_resources sc8280xp_res = {
++	.freq_tbl = sc8280xp_freq_table,
++	.freq_tbl_size = ARRAY_SIZE(sc8280xp_freq_table),
++	.reg_tbl = sm8350_reg_preset,
++	.reg_tbl_size = ARRAY_SIZE(sm8350_reg_preset),
++	.bw_tbl_enc = sm8250_bw_table_enc,
++	.bw_tbl_enc_size = ARRAY_SIZE(sm8250_bw_table_enc),
++	.bw_tbl_dec = sm8250_bw_table_dec,
++	.bw_tbl_dec_size = ARRAY_SIZE(sm8250_bw_table_dec),
++	.clks = { "core", "iface" },
++	.clks_num = 2,
++	.resets = { "core" },
++	.resets_num = 1,
++	.vcodec0_clks = { "vcodec0_core" },
++	.vcodec_clks_num = 1,
++	.vcodec_pmdomains = (const char *[]) { "venus", "vcodec0" },
++	.vcodec_pmdomains_num = 2,
++	.opp_pmdomain = (const char *[]) { "mx", NULL },
++	.vcodec_num = 1,
++	.max_load = 7833600, /* 7680x4320@60fps */
++	.hfi_version = HFI_VERSION_6XX,
++	.vpu_version = VPU_VERSION_IRIS2,
++	.num_vpp_pipes = 4,
++	.vmem_id = VIDC_RESOURCE_NONE,
++	.vmem_size = 0,
++	.vmem_addr = 0,
++	.dma_mask = GENMASK(31, 29) - 1,
++	.cp_start = 0,
++	.cp_size = 0x25800000,
++	.cp_nonpixel_start = 0x1000000,
++	.cp_nonpixel_size = 0x24800000,
++	.fwname = "qcom/vpu-2.0/venus.mbn",
++};
++
+ static const struct bw_tbl qcm2290_bw_table_dec[] = {
+ 	{ 352800, 597000, 0, 746000, 0 }, /* 1080p@30 + 720p@30 */
+ 	{ 244800, 413000, 0, 516000, 0 }, /* 1080p@30 */
+@@ -1176,8 +1276,10 @@ static const struct of_device_id venus_dt_match[] = {
+ 	{ .compatible = "qcom,msm8996-venus", .data = &msm8996_res, },
+ 	{ .compatible = "qcom,msm8998-venus", .data = &msm8998_res, },
+ 	{ .compatible = "qcom,qcm2290-venus", .data = &qcm2290_res, },
++	{ .compatible = "qcom,sc8280xp-venus", .data = &sc8280xp_res },
+ 	{ .compatible = "qcom,sc7180-venus", .data = &sc7180_res, },
+ 	{ .compatible = "qcom,sdm660-venus", .data = &sdm660_res, },
++	{ .compatible = "qcom,sm8350-venus", .data = &sm8350_res },
+ 	{ .compatible = "qcom,sdm845-venus", .data = &sdm845_res, },
+ 	{ .compatible = "qcom,sdm845-venus-v2", .data = &sdm845_res_v2, },
+ #if (!IS_ENABLED(CONFIG_VIDEO_QCOM_IRIS))
+diff --git a/drivers/media/platform/qcom/venus/core.h b/drivers/media/platform/qcom/venus/core.h
+index 46705a666..da4a18eb0 100644
+--- a/drivers/media/platform/qcom/venus/core.h
++++ b/drivers/media/platform/qcom/venus/core.h
+@@ -40,6 +40,7 @@ struct freq_tbl {
+ struct reg_val {
+ 	u32 reg;
+ 	u32 value;
++	u32 mask;
+ };
+ 
+ struct bw_tbl {
+@@ -74,6 +75,7 @@ struct venus_resources {
+ 	unsigned int bw_tbl_enc_size;
+ 	const struct bw_tbl *bw_tbl_dec;
+ 	unsigned int bw_tbl_dec_size;
++	bool has_llcc_path;
+ 	const struct reg_val *reg_tbl;
+ 	unsigned int reg_tbl_size;
+ 	const struct hfi_ubwc_config *ubwc_conf;
+@@ -151,6 +153,7 @@ struct venus_format {
+  * @vcodec1_clks: an array of vcodec1 struct clk pointers
+  * @video_path: an interconnect handle to video to/from memory path
+  * @cpucfg_path: an interconnect handle to cpu configuration path
++ * @llcc_path: an interconnect handle to video to/from llcc path
+  * @pmdomains:	a pointer to a list of pmdomains
+  * @opp_pmdomain: an OPP power-domain
+  * @resets: an array of reset signals
+@@ -206,6 +209,7 @@ struct venus_core {
+ 	struct clk *vcodec1_clks[VIDC_VCODEC_CLKS_NUM_MAX];
+ 	struct icc_path *video_path;
+ 	struct icc_path *cpucfg_path;
++	struct icc_path *llcc_path;
+ 	struct dev_pm_domain_list *pmdomains;
+ 	struct dev_pm_domain_list *opp_pmdomain;
+ 	struct reset_control *resets[VIDC_RESETS_NUM_MAX];
+diff --git a/drivers/media/platform/qcom/venus/hfi_venus.c b/drivers/media/platform/qcom/venus/hfi_venus.c
+index bd82066bb..9f76a4fe5 100644
+--- a/drivers/media/platform/qcom/venus/hfi_venus.c
++++ b/drivers/media/platform/qcom/venus/hfi_venus.c
+@@ -369,10 +369,19 @@ static void venus_set_registers(struct venus_hfi_device *hdev)
+ 	const struct venus_resources *res = hdev->core->res;
+ 	const struct reg_val *tbl = res->reg_tbl;
+ 	unsigned int count = res->reg_tbl_size;
+-	unsigned int i;
++	unsigned int i, val;
++
++	for (i = 0; i < count; i++) {
++		val = tbl[i].value;
+ 
+-	for (i = 0; i < count; i++)
+-		writel(tbl[i].value, hdev->core->base + tbl[i].reg);
++		/* In some cases, we only want to update certain bits */
++		if (tbl[i].mask) {
++			val = readl(hdev->core->base + tbl[i].reg);
++			val = (val & ~tbl[i].mask) | (tbl[i].value & tbl[i].mask);
++		}
++
++		writel(val, hdev->core->base + tbl[i].reg);
++	}
+ }
+ 
+ static void venus_soft_int(struct venus_hfi_device *hdev)
+diff --git a/drivers/media/platform/qcom/venus/pm_helpers.c b/drivers/media/platform/qcom/venus/pm_helpers.c
+index be1cbd5cf..068005303 100644
+--- a/drivers/media/platform/qcom/venus/pm_helpers.c
++++ b/drivers/media/platform/qcom/venus/pm_helpers.c
+@@ -254,6 +254,9 @@ static int load_scale_bw(struct venus_core *core)
+ 	dev_dbg(core->dev, VDBGL "total: avg_bw: %u, peak_bw: %u\n",
+ 		total_avg, total_peak);
+ 
++	if (core->res->has_llcc_path)
++		icc_set_bw(core->llcc_path, total_avg, total_peak);
++
+ 	return icc_set_bw(core->video_path, total_avg, total_peak);
+ }
+ 
+-- 
+2.55.0
