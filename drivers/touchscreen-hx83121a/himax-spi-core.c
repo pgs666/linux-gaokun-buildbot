@@ -30,6 +30,7 @@ MODULE_PARM_DESC(disable_pressure, "Disable ABS_MT_TOUCH_MAJOR and ABS_MT_PRESSU
 #include <drm/drm_panel.h>
 
 #include "hx-algo.h"
+#include "hx-frame-status.h"
 
 #define HIMAX_BUS_RETRY					3
 /* SPI bus read header length */
@@ -102,6 +103,7 @@ HIMAX_MAX_TX + HIMAX_MAX_RX) * 2)
 #define HIMAX_PANEL_REINIT_DELAY_MS			50
 /* Let the panel and display pipeline settle before TDDI touch recovery. */
 #define HIMAX_PANEL_ENABLE_SETTLE_MS			300
+#define HIMAX_MAX_CONSECUTIVE_FRAME_ERRORS		3
 /* HIMAX SPI function select, 1st byte of any SPI command sequence */
 #define HIMAX_SPI_FUNCTION_READ				0xf3
 #define HIMAX_SPI_FUNCTION_WRITE			0xf2
@@ -134,6 +136,7 @@ struct himax_ts_data {
 	struct drm_panel_follower panel_follower;
 	struct delayed_work panel_reinit_work;
 	struct hx_algo *algo;
+	u8 consecutive_frame_errors;
 };
 
 static void himax_report_tracked_state(struct himax_ts_data *ts, bool report_on);
@@ -639,10 +642,7 @@ static int himax_input_dev_config(struct himax_ts_data *ts)
 static void himax_release_all_touches(struct himax_ts_data *ts)
 {
 	if (ts->algo) {
-		memset(ts->algo->tracks, 0, sizeof(ts->algo->tracks));
-		ts->algo->touch_start_frames = 0;
-		ts->algo->touch_active = false;
-		ts->algo->iir_initialized = false;
+		hx_algo_reset_runtime(ts->algo);
 	}
 
 	if (ts->input_dev)
@@ -868,12 +868,14 @@ static ssize_t _name##_store(struct device *dev,			\
 	int ret = kstrtobool(buf, &val);				\
 	if (ret)							\
 		return ret;						\
+	mutex_lock(&ts->op_lock);				\
 	ts->algo->_name = val;						\
+	mutex_unlock(&ts->op_lock);				\
 	return count;							\
 }									\
 static DEVICE_ATTR_RW(_name)
 
-#define HX_ALGO_ATTR_S16_RW(_name)					\
+#define HX_ALGO_ATTR_S16_RW(_name, _min, _max)				\
 static ssize_t _name##_show(struct device *dev,				\
 			    struct device_attribute *attr, char *buf)	\
 {									\
@@ -889,12 +891,16 @@ static ssize_t _name##_store(struct device *dev,			\
 	int ret = kstrtos16(buf, 0, &val);				\
 	if (ret)							\
 		return ret;						\
+	if (val < (_min) || val > (_max))				\
+		return -ERANGE;						\
+	mutex_lock(&ts->op_lock);				\
 	ts->algo->_name = val;						\
+	mutex_unlock(&ts->op_lock);				\
 	return count;							\
 }									\
 static DEVICE_ATTR_RW(_name)
 
-#define HX_ALGO_ATTR_U16_RW(_name)					\
+#define HX_ALGO_ATTR_U16_RW(_name, _min, _max)				\
 static ssize_t _name##_show(struct device *dev,				\
 			    struct device_attribute *attr, char *buf)	\
 {									\
@@ -910,12 +916,16 @@ static ssize_t _name##_store(struct device *dev,			\
 	int ret = kstrtou16(buf, 0, &val);				\
 	if (ret)							\
 		return ret;						\
+	if (val < (_min) || val > (_max))				\
+		return -ERANGE;						\
+	mutex_lock(&ts->op_lock);				\
 	ts->algo->_name = val;						\
+	mutex_unlock(&ts->op_lock);				\
 	return count;							\
 }									\
 static DEVICE_ATTR_RW(_name)
 
-#define HX_ALGO_ATTR_U8_RW(_name)					\
+#define HX_ALGO_ATTR_U8_RW(_name, _min, _max)				\
 static ssize_t _name##_show(struct device *dev,				\
 			    struct device_attribute *attr, char *buf)	\
 {									\
@@ -931,12 +941,16 @@ static ssize_t _name##_store(struct device *dev,			\
 	int ret = kstrtou8(buf, 0, &val);				\
 	if (ret)							\
 		return ret;						\
+	if (val < (_min) || val > (_max))				\
+		return -ERANGE;						\
+	mutex_lock(&ts->op_lock);				\
 	ts->algo->_name = val;						\
+	mutex_unlock(&ts->op_lock);				\
 	return count;							\
 }									\
 static DEVICE_ATTR_RW(_name)
 
-#define HX_ALGO_ATTR_S32_RW(_name)					\
+#define HX_ALGO_ATTR_S32_RW(_name, _min, _max)				\
 static ssize_t _name##_show(struct device *dev,				\
 			    struct device_attribute *attr, char *buf)	\
 {									\
@@ -952,45 +966,128 @@ static ssize_t _name##_store(struct device *dev,			\
 	int ret = kstrtos32(buf, 0, &val);				\
 	if (ret)							\
 		return ret;						\
+	if (val < (_min) || val > (_max))				\
+		return -ERANGE;						\
+	mutex_lock(&ts->op_lock);				\
 	ts->algo->_name = val;						\
+	mutex_unlock(&ts->op_lock);				\
 	return count;							\
 }									\
 static DEVICE_ATTR_RW(_name)
 
 /* Preprocessing */
+HX_ALGO_ATTR_BOOL_RW(baseline_enabled);
+HX_ALGO_ATTR_S16_RW(baseline_noise_deadband, 0, 200);
+HX_ALGO_ATTR_S16_RW(baseline_peak_threshold, 1, 2000);
+HX_ALGO_ATTR_U8_RW(baseline_release_hold_frames, 0, 255);
+HX_ALGO_ATTR_U8_RW(baseline_background_alpha_shift, 0, 15);
+HX_ALGO_ATTR_U8_RW(baseline_no_finger_alpha_shift, 0, 15);
+HX_ALGO_ATTR_U8_RW(baseline_recovery_alpha_shift, 0, 15);
+HX_ALGO_ATTR_S16_RW(baseline_background_max_step, 1, 2048);
+HX_ALGO_ATTR_S16_RW(baseline_no_finger_max_step, 1, 2048);
+HX_ALGO_ATTR_S16_RW(baseline_recovery_max_step, 1, 2048);
+HX_ALGO_ATTR_U8_RW(baseline_recovery_max_frames, 1, 120);
+HX_ALGO_ATTR_BOOL_RW(baseline_noise_tracking);
 HX_ALGO_ATTR_BOOL_RW(cmf_enabled);
-HX_ALGO_ATTR_S16_RW(cmf_exclusion);
-HX_ALGO_ATTR_S16_RW(cmf_max_correction);
+HX_ALGO_ATTR_S16_RW(cmf_exclusion, 0, 32767);
+HX_ALGO_ATTR_S16_RW(cmf_max_correction, 0, 32767);
 HX_ALGO_ATTR_BOOL_RW(iir_enabled);
-HX_ALGO_ATTR_U16_RW(iir_decay_weight);
-HX_ALGO_ATTR_U16_RW(iir_decay_step);
-HX_ALGO_ATTR_S16_RW(iir_noise_floor);
-HX_ALGO_ATTR_S16_RW(iir_gate_floor);
-HX_ALGO_ATTR_U8_RW(iir_gate_ratio_q8);
+HX_ALGO_ATTR_U16_RW(iir_decay_weight, 0, 256);
+HX_ALGO_ATTR_U16_RW(iir_decay_step, 0, 4095);
+HX_ALGO_ATTR_S16_RW(iir_noise_floor, 0, 4095);
+HX_ALGO_ATTR_S16_RW(iir_gate_floor, 0, 4095);
+HX_ALGO_ATTR_U8_RW(iir_gate_ratio_q8, 0, 255);
 /* Detection */
-HX_ALGO_ATTR_S16_RW(macro_threshold);
-HX_ALGO_ATTR_S16_RW(peak_threshold);
+HX_ALGO_ATTR_S16_RW(macro_threshold, 1, 4095);
+HX_ALGO_ATTR_S16_RW(peak_threshold, 1, 4095);
+HX_ALGO_ATTR_U8_RW(peak_local_radius, 1, 5);
+HX_ALGO_ATTR_BOOL_RW(peak_z8_enabled);
+HX_ALGO_ATTR_BOOL_RW(peak_saddle_enabled);
+HX_ALGO_ATTR_U8_RW(peak_saddle_radius, 1, 8);
+HX_ALGO_ATTR_S16_RW(peak_saddle_drop, 0, 4095);
+HX_ALGO_ATTR_S16_RW(peak_signal_threshold_limit, 1, 4095);
+HX_ALGO_ATTR_S16_RW(peak_edge_threshold, 0, 4095);
+HX_ALGO_ATTR_U8_RW(peak_macro_min_area, 1, 64);
 HX_ALGO_ATTR_BOOL_RW(palm_enabled);
-HX_ALGO_ATTR_U8_RW(palm_area_threshold);
-HX_ALGO_ATTR_S32_RW(palm_signal_threshold);
-HX_ALGO_ATTR_S16_RW(palm_density_low);
+HX_ALGO_ATTR_U8_RW(palm_area_threshold, 0, 250);
+HX_ALGO_ATTR_S32_RW(palm_signal_threshold, 0, 1000000);
+HX_ALGO_ATTR_S16_RW(palm_density_low, 0, 4095);
+HX_ALGO_ATTR_BOOL_RW(palm_box_enabled);
+HX_ALGO_ATTR_U8_RW(palm_box_expand_rows, 0, 10);
+HX_ALGO_ATTR_U8_RW(palm_box_expand_cols, 0, 10);
+HX_ALGO_ATTR_U8_RW(palm_box_match_distance, 0, 30);
+HX_ALGO_ATTR_U16_RW(palm_box_max_hold, 0, 300);
+HX_ALGO_ATTR_BOOL_RW(zone_cleanup_enabled);
+HX_ALGO_ATTR_U8_RW(zone_max_radius, 0, 16);
+HX_ALGO_ATTR_U8_RW(zone_threshold_numer, 0, 255);
+HX_ALGO_ATTR_U8_RW(zone_threshold_shift, 0, 15);
 /* Pressure / touch-major reporting */
 HX_ALGO_ATTR_BOOL_RW(pressure_enabled);
 /* Edge compensation */
 HX_ALGO_ATTR_BOOL_RW(edge_comp_enabled);
-HX_ALGO_ATTR_S16_RW(edge_boost_pct);
-HX_ALGO_ATTR_S16_RW(edge_push_q8);
-HX_ALGO_ATTR_S16_RW(edge_blend_q8);
+HX_ALGO_ATTR_S16_RW(edge_boost_pct, 0, 200);
+HX_ALGO_ATTR_S16_RW(edge_push_q8, 0, 1280);
+HX_ALGO_ATTR_S16_RW(edge_blend_q8, 1, 1280);
+HX_ALGO_ATTR_BOOL_RW(edge_reject_enabled);
+HX_ALGO_ATTR_U16_RW(edge_reject_margin, 0, 256);
+HX_ALGO_ATTR_S32_RW(edge_reject_min_signal, 0, 1000000);
 /* Tracking */
-HX_ALGO_ATTR_S32_RW(track_dist2_max);
-HX_ALGO_ATTR_U8_RW(track_lost_frames);
-HX_ALGO_ATTR_U8_RW(debounce_base);
+HX_ALGO_ATTR_S32_RW(track_dist2_max, 1, 16777216);
+HX_ALGO_ATTR_U8_RW(track_lost_frames, 1, 16);
+HX_ALGO_ATTR_U8_RW(debounce_base, 0, 16);
 HX_ALGO_ATTR_BOOL_RW(track_smoothing);
 HX_ALGO_ATTR_BOOL_RW(track_active_guard);
-HX_ALGO_ATTR_U8_RW(track_start_debounce);
-HX_ALGO_ATTR_S32_RW(track_jump_dist2);
+HX_ALGO_ATTR_U8_RW(track_start_debounce, 0, 16);
+HX_ALGO_ATTR_S32_RW(track_jump_dist2, 0, 16777216);
+HX_ALGO_ATTR_BOOL_RW(hungarian_enabled);
+HX_ALGO_ATTR_U8_RW(debounce_weak_extra, 0, 16);
+HX_ALGO_ATTR_U8_RW(debounce_edge_extra, 0, 16);
+HX_ALGO_ATTR_S32_RW(debounce_strong_signal, 0, 1000000);
+HX_ALGO_ATTR_BOOL_RW(ghost_enabled);
+HX_ALGO_ATTR_U16_RW(ghost_row_distance, 0, 512);
+HX_ALGO_ATTR_U8_RW(ghost_weak_ratio_q8, 0, 255);
+HX_ALGO_ATTR_U16_RW(ghost_min_col_distance, 0, 4096);
+HX_ALGO_ATTR_BOOL_RW(euro_enabled);
+HX_ALGO_ATTR_U8_RW(euro_alpha_min_q8, 1, 255);
+HX_ALGO_ATTR_U8_RW(euro_alpha_max_q8, 1, 255);
+HX_ALGO_ATTR_U16_RW(euro_speed_threshold, 1, 4096);
+HX_ALGO_ATTR_U16_RW(gesture_drag_distance, 0, 4096);
+HX_ALGO_ATTR_U16_RW(gesture_long_press_frames, 1, 600);
+
+static ssize_t diagnostics_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct himax_ts_data *ts = dev_get_drvdata(dev);
+	struct hx_algo *a = ts->algo;
+	ssize_t len;
+
+	mutex_lock(&ts->op_lock);
+	len = sysfs_emit(buf,
+		"frame=%u common=%d max=%d signal=%u zones=%u peaks=%u "
+		"contacts_pre=%u contacts_post=%u active=%u reported=%u\n",
+		a->diag_frame_seq, a->diag_common_diff, a->diag_frame_max,
+		a->diag_has_signal, a->diag_zones, a->diag_peaks,
+		a->diag_contacts_pre_filter, a->diag_contacts_post_filter,
+		a->diag_active_tracks, a->diag_reported_tracks);
+	mutex_unlock(&ts->op_lock);
+	return len;
+}
+static DEVICE_ATTR_RO(diagnostics);
 
 static struct attribute *hx_algo_attrs[] = {
+	&dev_attr_diagnostics.attr,
+	&dev_attr_baseline_enabled.attr,
+	&dev_attr_baseline_noise_deadband.attr,
+	&dev_attr_baseline_peak_threshold.attr,
+	&dev_attr_baseline_release_hold_frames.attr,
+	&dev_attr_baseline_background_alpha_shift.attr,
+	&dev_attr_baseline_no_finger_alpha_shift.attr,
+	&dev_attr_baseline_recovery_alpha_shift.attr,
+	&dev_attr_baseline_background_max_step.attr,
+	&dev_attr_baseline_no_finger_max_step.attr,
+	&dev_attr_baseline_recovery_max_step.attr,
+	&dev_attr_baseline_recovery_max_frames.attr,
+	&dev_attr_baseline_noise_tracking.attr,
 	&dev_attr_cmf_enabled.attr,
 	&dev_attr_cmf_exclusion.attr,
 	&dev_attr_cmf_max_correction.attr,
@@ -1002,15 +1099,35 @@ static struct attribute *hx_algo_attrs[] = {
 	&dev_attr_iir_gate_ratio_q8.attr,
 	&dev_attr_macro_threshold.attr,
 	&dev_attr_peak_threshold.attr,
+	&dev_attr_peak_local_radius.attr,
+	&dev_attr_peak_z8_enabled.attr,
+	&dev_attr_peak_saddle_enabled.attr,
+	&dev_attr_peak_saddle_radius.attr,
+	&dev_attr_peak_saddle_drop.attr,
+	&dev_attr_peak_signal_threshold_limit.attr,
+	&dev_attr_peak_edge_threshold.attr,
+	&dev_attr_peak_macro_min_area.attr,
 	&dev_attr_palm_enabled.attr,
 	&dev_attr_palm_area_threshold.attr,
 	&dev_attr_palm_signal_threshold.attr,
 	&dev_attr_palm_density_low.attr,
+	&dev_attr_palm_box_enabled.attr,
+	&dev_attr_palm_box_expand_rows.attr,
+	&dev_attr_palm_box_expand_cols.attr,
+	&dev_attr_palm_box_match_distance.attr,
+	&dev_attr_palm_box_max_hold.attr,
+	&dev_attr_zone_cleanup_enabled.attr,
+	&dev_attr_zone_max_radius.attr,
+	&dev_attr_zone_threshold_numer.attr,
+	&dev_attr_zone_threshold_shift.attr,
 	&dev_attr_pressure_enabled.attr,
 	&dev_attr_edge_comp_enabled.attr,
 	&dev_attr_edge_boost_pct.attr,
 	&dev_attr_edge_push_q8.attr,
 	&dev_attr_edge_blend_q8.attr,
+	&dev_attr_edge_reject_enabled.attr,
+	&dev_attr_edge_reject_margin.attr,
+	&dev_attr_edge_reject_min_signal.attr,
 	&dev_attr_track_dist2_max.attr,
 	&dev_attr_track_lost_frames.attr,
 	&dev_attr_debounce_base.attr,
@@ -1018,6 +1135,20 @@ static struct attribute *hx_algo_attrs[] = {
 	&dev_attr_track_active_guard.attr,
 	&dev_attr_track_start_debounce.attr,
 	&dev_attr_track_jump_dist2.attr,
+	&dev_attr_hungarian_enabled.attr,
+	&dev_attr_debounce_weak_extra.attr,
+	&dev_attr_debounce_edge_extra.attr,
+	&dev_attr_debounce_strong_signal.attr,
+	&dev_attr_ghost_enabled.attr,
+	&dev_attr_ghost_row_distance.attr,
+	&dev_attr_ghost_weak_ratio_q8.attr,
+	&dev_attr_ghost_min_col_distance.attr,
+	&dev_attr_euro_enabled.attr,
+	&dev_attr_euro_alpha_min_q8.attr,
+	&dev_attr_euro_alpha_max_q8.attr,
+	&dev_attr_euro_speed_threshold.attr,
+	&dev_attr_gesture_drag_distance.attr,
+	&dev_attr_gesture_long_press_frames.attr,
 	NULL,
 };
 
@@ -1068,7 +1199,7 @@ static void himax_report_tracked_state(struct himax_ts_data *ts, bool report_on)
 
 	for (i = 0; i < HIMAX_MAX_TOUCH; i++) {
 		bool on = report_on && ts->algo->tracks[i].active &&
-			  ts->algo->tracks[i].debounce == 0;
+			  ts->algo->tracks[i].reported;
 
 		input_mt_slot(ts->input_dev, i);
 		input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, on);
@@ -1108,10 +1239,8 @@ static irqreturn_t himax_ts_thread(int irq, void *data)
 	struct himax_ts_data *ts = data;
 	u16 *ptr = (u16 *)(ts->event_buf + OFST);
 	struct hx_algo *algo = ts->algo;
-	struct input_mt_pos pos[HIMAX_MAX_TOUCH];
-	int cnt;
+	struct hx_frame_status frame_status;
 	int stable_cnt;
-	bool report_on = true;
 	irqreturn_t irq_ret = IRQ_HANDLED;
 
 	mutex_lock(&ts->op_lock);
@@ -1121,45 +1250,52 @@ static irqreturn_t himax_ts_thread(int irq, void *data)
 	}
 
 	if (hx83121a_gaokun_read_event_stack(ts)) {
-		dev_err(ts->dev, "failed to get touch data!\n");
-		himax_mcu_ic_reset(ts, true);
-		irq_ret = IRQ_NONE;
+		/* AFE transitions can transiently lose one or two frames.  Resetting
+		 * the controller on the first miss creates a long, user-visible UP/
+		 * DOWN break.  Match the Windows runtime recovery policy and recover
+		 * only after a consecutive failure streak. */
+		if (++ts->consecutive_frame_errors >=
+		    HIMAX_MAX_CONSECUTIVE_FRAME_ERRORS) {
+			dev_err(ts->dev, "%u consecutive frame reads failed, resetting controller\n",
+				ts->consecutive_frame_errors);
+			ts->consecutive_frame_errors = 0;
+			himax_release_all_touches(ts);
+			himax_mcu_ic_reset(ts, true);
+		} else {
+			dev_warn_ratelimited(ts->dev,
+				"touch frame read failed (%u/%u), retaining tracks\n",
+				ts->consecutive_frame_errors,
+				HIMAX_MAX_CONSECUTIVE_FRAME_ERRORS);
+		}
 		goto out_unlock;
 	}
+	ts->consecutive_frame_errors = 0;
+	if (!hx_parse_master_frame_status(ts->event_buf, ts->event_buf_sz,
+					  &frame_status) || frame_status.retry) {
+		/* A shifted, non-master, or retry frame is not a missing touch frame:
+		 * retain and re-report current tracks without feeding garbage into the
+		 * baseline or advancing tracker miss counters.
+		 */
+		dev_warn_ratelimited(ts->dev,
+			"discarding invalid/retry master event-stack frame\n");
+		stable_cnt = hx_count_stable_tracks(algo);
+		goto report;
+	}
 
-	// dump_frame((void *)ptr - OFST, true);
-
-	hx_preprocess_frame(algo, ptr);
-	/* dump_frame(algo); */
-
-	hx_detect_macro_zones(algo);
-	hx_reject_palms(algo);
-	hx_detect_peaks(algo);
-	hx_expand_and_resolve(algo, pos, &cnt);
-	hx_track_contacts(algo, pos, cnt);
-	stable_cnt = hx_count_stable_tracks(algo);
+	stable_cnt = hx_algo_process_frame_state(algo, ptr,
+		frame_status.has_finger ? HX_FINGER_PRESENT : HX_FINGER_ABSENT);
 
 	/* Not final results, touchscreen_report_pos will handle this (x-y swap, y invert) */
 	for (int i = 0; i < HIMAX_MAX_TOUCH; ++i) {
-		if (!(algo->tracks[i].active && algo->tracks[i].debounce == 0))
+		if (!(algo->tracks[i].active && algo->tracks[i].reported))
 			continue;
 		dev_dbg(ts->dev, "slot %d x-y: %d, %d\n", i,
 			algo->tracks[i].x, algo->tracks[i].y);
 	}
 
-	if (stable_cnt > 0 && !algo->touch_active) {
-		algo->touch_start_frames++;
-		if (algo->touch_start_frames < algo->track_start_debounce)
-			report_on = false;
-		else
-			algo->touch_active = true;
-	} else if (stable_cnt == 0) {
-		algo->touch_start_frames = 0;
-		algo->touch_active = false;
-	}
-
+report:
 	/* 这里报告给系统的坐标数据可以通过 evtest 查看 */
-	himax_report_tracked_state(ts, report_on);
+	himax_report_tracked_state(ts, stable_cnt > 0);
 
 out_unlock:
 	mutex_unlock(&ts->op_lock);
