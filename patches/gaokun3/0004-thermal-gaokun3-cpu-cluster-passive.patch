@@ -1,7 +1,7 @@
 From a9694ab9ff7e8f33e616ec27d75f4f47366f8c57 Mon Sep 17 00:00:00 2001
 From: "github-actions[bot]" <github-actions[bot]@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 22:12:21 +0800
-Subject: [PATCH] thermal: gaokun3: throttle hottest CPU cluster at 80C
+Subject: [PATCH] thermal: gaokun3: throttle hottest CPU cluster at 75C
 
 ---
  .../boot/dts/qcom/sc8280xp-huawei-gaokun3.dts | 138 +++++++++++++++++-
@@ -18,7 +18,7 @@ index 52dbfa79a..cd19564e8 100644
 +		cpu0-thermal {
 +			trips {
 +				cpu0_passive: cpu-passive {
-+					temperature = <80000>;
++					temperature = <75000>;
 +					hysteresis = <5000>;
 +					type = "passive";
 +				};
@@ -35,7 +35,7 @@ index 52dbfa79a..cd19564e8 100644
 +		cpu1-thermal {
 +			trips {
 +				cpu1_passive: cpu-passive {
-+					temperature = <80000>;
++					temperature = <75000>;
 +					hysteresis = <5000>;
 +					type = "passive";
 +				};
@@ -52,7 +52,7 @@ index 52dbfa79a..cd19564e8 100644
 +		cpu2-thermal {
 +			trips {
 +				cpu2_passive: cpu-passive {
-+					temperature = <80000>;
++					temperature = <75000>;
 +					hysteresis = <5000>;
 +					type = "passive";
 +				};
@@ -69,7 +69,7 @@ index 52dbfa79a..cd19564e8 100644
 +		cpu3-thermal {
 +			trips {
 +				cpu3_passive: cpu-passive {
-+					temperature = <80000>;
++					temperature = <75000>;
 +					hysteresis = <5000>;
 +					type = "passive";
 +				};
@@ -86,7 +86,7 @@ index 52dbfa79a..cd19564e8 100644
 +		cpu4-thermal {
 +			trips {
 +				cpu4_passive: cpu-passive {
-+					temperature = <80000>;
++					temperature = <75000>;
 +					hysteresis = <5000>;
 +					type = "passive";
 +				};
@@ -103,7 +103,7 @@ index 52dbfa79a..cd19564e8 100644
 +		cpu5-thermal {
 +			trips {
 +				cpu5_passive: cpu-passive {
-+					temperature = <80000>;
++					temperature = <75000>;
 +					hysteresis = <5000>;
 +					type = "passive";
 +				};
@@ -120,7 +120,7 @@ index 52dbfa79a..cd19564e8 100644
 +		cpu6-thermal {
 +			trips {
 +				cpu6_passive: cpu-passive {
-+					temperature = <80000>;
++					temperature = <75000>;
 +					hysteresis = <5000>;
 +					type = "passive";
 +				};
@@ -137,7 +137,7 @@ index 52dbfa79a..cd19564e8 100644
 +		cpu7-thermal {
 +			trips {
 +				cpu7_passive: cpu-passive {
-+					temperature = <80000>;
++					temperature = <75000>;
 +					hysteresis = <5000>;
 +					type = "passive";
 +				};
@@ -165,4 +165,3 @@ index 52dbfa79a..cd19564e8 100644
  				};
 -- 
 2.55.0
-

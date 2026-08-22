@@ -224,7 +224,7 @@
 		cpu0-thermal {
 			trips {
 				cpu0_passive: cpu-passive {
-					temperature = <80000>;
+					temperature = <75000>;
 					hysteresis = <5000>;
 					type = "passive";
 				};
@@ -241,7 +241,7 @@
 		cpu1-thermal {
 			trips {
 				cpu1_passive: cpu-passive {
-					temperature = <80000>;
+					temperature = <75000>;
 					hysteresis = <5000>;
 					type = "passive";
 				};
@@ -258,7 +258,7 @@
 		cpu2-thermal {
 			trips {
 				cpu2_passive: cpu-passive {
-					temperature = <80000>;
+					temperature = <75000>;
 					hysteresis = <5000>;
 					type = "passive";
 				};
@@ -275,7 +275,7 @@
 		cpu3-thermal {
 			trips {
 				cpu3_passive: cpu-passive {
-					temperature = <80000>;
+					temperature = <75000>;
 					hysteresis = <5000>;
 					type = "passive";
 				};
@@ -292,7 +292,7 @@
 		cpu4-thermal {
 			trips {
 				cpu4_passive: cpu-passive {
-					temperature = <80000>;
+					temperature = <75000>;
 					hysteresis = <5000>;
 					type = "passive";
 				};
@@ -309,7 +309,7 @@
 		cpu5-thermal {
 			trips {
 				cpu5_passive: cpu-passive {
-					temperature = <80000>;
+					temperature = <75000>;
 					hysteresis = <5000>;
 					type = "passive";
 				};
@@ -326,7 +326,7 @@
 		cpu6-thermal {
 			trips {
 				cpu6_passive: cpu-passive {
-					temperature = <80000>;
+					temperature = <75000>;
 					hysteresis = <5000>;
 					type = "passive";
 				};
@@ -343,7 +343,7 @@
 		cpu7-thermal {
 			trips {
 				cpu7_passive: cpu-passive {
-					temperature = <80000>;
+					temperature = <75000>;
 					hysteresis = <5000>;
 					type = "passive";
 				};

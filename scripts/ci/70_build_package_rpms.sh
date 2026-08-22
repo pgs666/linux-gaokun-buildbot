@@ -366,3 +366,8 @@ ${EL2_RELEASE_BLOCK}
 - \`${FIRMWARE_RPM}\`
 - \`${UCM_RPM}\`
 EOF
+
+(
+  cd "$ARTIFACT_DIR"
+  sha256sum -- ./*.rpm >package-sha256sums.txt
+)

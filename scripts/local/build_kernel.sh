@@ -6,7 +6,7 @@ GAOKUN_DIR="${GAOKUN_DIR:-$HOME/gaokun/linux-gaokun-buildbot}"
 KERN_SRC="${KERN_SRC:-$HOME/gaokun/mainline-linux}"
 KERN_OUT="${KERN_OUT:-$HOME/gaokun/kernel-out}"
 KERN_OUT_EL2="${KERN_OUT_EL2:-$HOME/gaokun/kernel-out-el2}"
-GAOKUN3_PATCHSET_TIP="thermal: gaokun3: throttle hottest CPU cluster at 80C"
+GAOKUN3_PATCHSET_TIP="thermal: gaokun3: throttle hottest CPU cluster at 75C"
 
 if [[ -f /etc/os-release ]]; then
     # shellcheck disable=SC1091
