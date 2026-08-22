@@ -1,0 +1,29 @@
+From 854afacf4c54a8b3d53bc816d62f320c9387850e Mon Sep 17 00:00:00 2001
+From: "github-actions[bot]" <github-actions[bot]@users.noreply.github.com>
+Date: Sat, 22 Aug 2026 16:40:02 +0800
+Subject: [PATCH] arm64: dts: qcom: gaokun3: drive touch mode GPIO174 low
+
+---
+ arch/arm64/boot/dts/qcom/sc8280xp-huawei-gaokun3.dts | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/sc8280xp-huawei-gaokun3.dts b/arch/arm64/boot/dts/qcom/sc8280xp-huawei-gaokun3.dts
+index dc647b90c..52dbfa79a 100644
+--- a/arch/arm64/boot/dts/qcom/sc8280xp-huawei-gaokun3.dts
++++ b/arch/arm64/boot/dts/qcom/sc8280xp-huawei-gaokun3.dts
+@@ -1636,6 +1636,12 @@ cs-n-pins {
+ 	};
+ 
+ 	ts0_default: ts0-default-state {
++		mode-pins {
++			pins = "gpio174";
++			function = "gpio";
++			output-low;
++		};
++
+ 		int-n-pins {
+ 			pins = "gpio175";
+ 			function = "gpio";
+-- 
+2.55.0
+

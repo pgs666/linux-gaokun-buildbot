@@ -608,6 +608,7 @@ static const struct hwmon_channel_info gaokun_ec_temp = {
 };
 
 static const struct hwmon_channel_info * const gaokun_ec_hwmon_info[] = {
+	HWMON_CHANNEL_INFO(chip, HWMON_C_REGISTER_TZ),
 	&gaokun_ec_temp,
 	NULL
 };

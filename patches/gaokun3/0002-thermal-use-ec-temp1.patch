@@ -1,0 +1,120 @@
+From d7596a3386017bcd94b0ccba06b369646c1e1dfb Mon Sep 17 00:00:00 2001
+From: "github-actions[bot]" <github-actions[bot]@users.noreply.github.com>
+Date: Fri, 21 Aug 2026 23:59:23 +0800
+Subject: [PATCH] thermal: gaokun3: throttle CPUs using EC temp1
+
+---
+ .../huawei,gaokun3-ec.yaml                    |  4 ++
+ .../boot/dts/qcom/sc8280xp-huawei-gaokun3.dts | 42 +++++--------------
+ drivers/platform/arm64/huawei-gaokun-ec.c     |  1 +
+ 3 files changed, 16 insertions(+), 31 deletions(-)
+
+diff --git a/Documentation/devicetree/bindings/embedded-controller/huawei,gaokun3-ec.yaml b/Documentation/devicetree/bindings/embedded-controller/huawei,gaokun3-ec.yaml
+index cd9e65b6c..63dd0d616 100644
+--- a/Documentation/devicetree/bindings/embedded-controller/huawei,gaokun3-ec.yaml
++++ b/Documentation/devicetree/bindings/embedded-controller/huawei,gaokun3-ec.yaml
+@@ -31,6 +31,9 @@ properties:
+   '#size-cells':
+     const: 0
+ 
++  '#thermal-sensor-cells':
++    const: 1
++
+   interrupts:
+     maxItems: 1
+ 
+@@ -64,6 +67,7 @@ examples:
+ 
+             #address-cells = <1>;
+             #size-cells = <0>;
++            #thermal-sensor-cells = <1>;
+ 
+             connector@0 {
+                 compatible = "usb-c-connector";
+diff --git a/arch/arm64/boot/dts/qcom/sc8280xp-huawei-gaokun3.dts b/arch/arm64/boot/dts/qcom/sc8280xp-huawei-gaokun3.dts
+index aeb13360e..dc647b90c 100644
+--- a/arch/arm64/boot/dts/qcom/sc8280xp-huawei-gaokun3.dts
++++ b/arch/arm64/boot/dts/qcom/sc8280xp-huawei-gaokun3.dts
+@@ -221,46 +221,25 @@ linux,cma {
+ 	};
+ 
+ 	thermal-zones {
+-		skin-temp-thermal {
++		ec-temp1-thermal {
++			polling-delay = <1000>;
+ 			polling-delay-passive = <250>;
+ 
+-			thermal-sensors = <&pmk8280_adc_tm 5>;
++			thermal-sensors = <&gaokun_ec 0>;
+ 
+ 			trips {
+-				skin_temp_alert0: trip-point0 {
+-					temperature = <55000>;
+-					hysteresis = <1000>;
++				ec_temp1_passive: trip-point0 {
++					temperature = <80000>;
++					hysteresis = <5000>;
+ 					type = "passive";
+ 				};
+-
+-				skin_temp_alert1: trip-point1 {
+-					temperature = <58000>;
+-					hysteresis = <1000>;
+-					type = "passive";
+-				};
+-
+-				skin-temp-crit {
+-					temperature = <73000>;
+-					hysteresis = <1000>;
+-					type = "critical";
+-				};
+ 			};
+ 
+ 			cooling-maps {
+ 				map0 {
+-					trip = <&skin_temp_alert0>;
+-					cooling-device = <&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+-							 <&cpu5 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+-							 <&cpu6 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+-							 <&cpu7 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+-				};
+-
+-				map1 {
+-					trip = <&skin_temp_alert1>;
+-					cooling-device = <&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+-							 <&cpu5 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+-							 <&cpu6 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+-							 <&cpu7 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
++					trip = <&ec_temp1_passive>;
++					cooling-device = <&cpu0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
++							 <&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+ 				};
+ 			};
+ 		};
+@@ -681,9 +660,10 @@ &i2c15 {
+ 
+ 	status = "okay";
+ 
+-	embedded-controller@38 {
++	gaokun_ec: embedded-controller@38 {
+ 		compatible = "huawei,gaokun3-ec";
+ 		reg = <0x38>;
++		#thermal-sensor-cells = <1>;
+ 
+ 		interrupts-extended = <&pdc 215 IRQ_TYPE_LEVEL_LOW>;
+ 		enable-gpios = <&tlmm 173 GPIO_ACTIVE_HIGH>;
+diff --git a/drivers/platform/arm64/huawei-gaokun-ec.c b/drivers/platform/arm64/huawei-gaokun-ec.c
+index 48b7b0dbe..1a29dabcf 100644
+--- a/drivers/platform/arm64/huawei-gaokun-ec.c
++++ b/drivers/platform/arm64/huawei-gaokun-ec.c
+@@ -608,6 +608,7 @@ static const struct hwmon_channel_info gaokun_ec_temp = {
+ };
+ 
+ static const struct hwmon_channel_info * const gaokun_ec_hwmon_info[] = {
++	HWMON_CHANNEL_INFO(chip, HWMON_C_REGISTER_TZ),
+ 	&gaokun_ec_temp,
+ 	NULL
+ };
+-- 
+2.55.0
+

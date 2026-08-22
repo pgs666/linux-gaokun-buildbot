@@ -1,0 +1,168 @@
+From a9694ab9ff7e8f33e616ec27d75f4f47366f8c57 Mon Sep 17 00:00:00 2001
+From: "github-actions[bot]" <github-actions[bot]@users.noreply.github.com>
+Date: Sat, 22 Aug 2026 22:12:21 +0800
+Subject: [PATCH] thermal: gaokun3: throttle hottest CPU cluster at 80C
+
+---
+ .../boot/dts/qcom/sc8280xp-huawei-gaokun3.dts | 138 +++++++++++++++++-
+ 1 file changed, 137 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/sc8280xp-huawei-gaokun3.dts b/arch/arm64/boot/dts/qcom/sc8280xp-huawei-gaokun3.dts
+index 52dbfa79a..cd19564e8 100644
+--- a/arch/arm64/boot/dts/qcom/sc8280xp-huawei-gaokun3.dts
++++ b/arch/arm64/boot/dts/qcom/sc8280xp-huawei-gaokun3.dts
+@@ -221,6 +221,142 @@ linux,cma {
+ 	};
+ 
+ 	thermal-zones {
++		cpu0-thermal {
++			trips {
++				cpu0_passive: cpu-passive {
++					temperature = <80000>;
++					hysteresis = <5000>;
++					type = "passive";
++				};
++			};
++
++			cooling-maps {
++				map0 {
++					trip = <&cpu0_passive>;
++					cooling-device = <&cpu0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
++				};
++			};
++		};
++
++		cpu1-thermal {
++			trips {
++				cpu1_passive: cpu-passive {
++					temperature = <80000>;
++					hysteresis = <5000>;
++					type = "passive";
++				};
++			};
++
++			cooling-maps {
++				map0 {
++					trip = <&cpu1_passive>;
++					cooling-device = <&cpu0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
++				};
++			};
++		};
++
++		cpu2-thermal {
++			trips {
++				cpu2_passive: cpu-passive {
++					temperature = <80000>;
++					hysteresis = <5000>;
++					type = "passive";
++				};
++			};
++
++			cooling-maps {
++				map0 {
++					trip = <&cpu2_passive>;
++					cooling-device = <&cpu0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
++				};
++			};
++		};
++
++		cpu3-thermal {
++			trips {
++				cpu3_passive: cpu-passive {
++					temperature = <80000>;
++					hysteresis = <5000>;
++					type = "passive";
++				};
++			};
++
++			cooling-maps {
++				map0 {
++					trip = <&cpu3_passive>;
++					cooling-device = <&cpu0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
++				};
++			};
++		};
++
++		cpu4-thermal {
++			trips {
++				cpu4_passive: cpu-passive {
++					temperature = <80000>;
++					hysteresis = <5000>;
++					type = "passive";
++				};
++			};
++
++			cooling-maps {
++				map0 {
++					trip = <&cpu4_passive>;
++					cooling-device = <&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
++				};
++			};
++		};
++
++		cpu5-thermal {
++			trips {
++				cpu5_passive: cpu-passive {
++					temperature = <80000>;
++					hysteresis = <5000>;
++					type = "passive";
++				};
++			};
++
++			cooling-maps {
++				map0 {
++					trip = <&cpu5_passive>;
++					cooling-device = <&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
++				};
++			};
++		};
++
++		cpu6-thermal {
++			trips {
++				cpu6_passive: cpu-passive {
++					temperature = <80000>;
++					hysteresis = <5000>;
++					type = "passive";
++				};
++			};
++
++			cooling-maps {
++				map0 {
++					trip = <&cpu6_passive>;
++					cooling-device = <&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
++				};
++			};
++		};
++
++		cpu7-thermal {
++			trips {
++				cpu7_passive: cpu-passive {
++					temperature = <80000>;
++					hysteresis = <5000>;
++					type = "passive";
++				};
++			};
++
++			cooling-maps {
++				map0 {
++					trip = <&cpu7_passive>;
++					cooling-device = <&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
++				};
++			};
++		};
++
+ 		ec-temp1-thermal {
+ 			polling-delay = <1000>;
+ 			polling-delay-passive = <250>;
+@@ -229,7 +365,7 @@ ec-temp1-thermal {
+ 
+ 			trips {
+ 				ec_temp1_passive: trip-point0 {
+-					temperature = <80000>;
++					temperature = <90000>;
+ 					hysteresis = <5000>;
+ 					type = "passive";
+ 				};
+-- 
+2.55.0
+

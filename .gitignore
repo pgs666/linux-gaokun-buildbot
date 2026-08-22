@@ -1,0 +1,7 @@
+/LOCAL_BUILD_SERVER.md
+/build-*/
+/artifacts/
+/artifacts-*/
+/downloads/
+/*.tar.zst
+/burn-thermal-*.log

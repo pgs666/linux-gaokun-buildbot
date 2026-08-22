@@ -6,6 +6,7 @@ GAOKUN_DIR="${GAOKUN_DIR:-$HOME/gaokun/linux-gaokun-buildbot}"
 KERN_SRC="${KERN_SRC:-$HOME/gaokun/mainline-linux}"
 KERN_OUT="${KERN_OUT:-$HOME/gaokun/kernel-out}"
 KERN_OUT_EL2="${KERN_OUT_EL2:-$HOME/gaokun/kernel-out-el2}"
+GAOKUN3_PATCHSET_TIP="thermal: gaokun3: throttle hottest CPU cluster at 80C"
 
 if [[ -f /etc/os-release ]]; then
     # shellcheck disable=SC1091
@@ -63,11 +64,13 @@ configure_git_identity() {
 }
 
 ensure_source_tree() {
-    if [[ -f "$KERN_SRC/arch/arm64/configs/gaokun3_defconfig" ]]; then
+    if [[ -f "$KERN_SRC/arch/arm64/configs/gaokun3_defconfig" ]] &&
+       git -C "$KERN_SRC" log --format=%s --fixed-strings \
+           --grep="$GAOKUN3_PATCHSET_TIP" | grep -Fxq "$GAOKUN3_PATCHSET_TIP"; then
         return 0
     fi
 
-    read -r -p "gaokun3_defconfig not found in kernel directory. Pull kernel and apply patches? [y/N] [default: N]: " response
+    read -r -p "Kernel source is missing or does not contain the current Gaokun3 patch series. Pull kernel and apply patches? [y/N] [default: N]: " response
     response="${response:-N}"
     if [[ ! "$response" =~ ^([yY][eE][sS]|[yY])$ ]]; then
         echo "Exiting."
@@ -96,7 +99,7 @@ ensure_source_tree() {
     git -C "$KERN_SRC" am "$GAOKUN_DIR"/patches/upstream/*.patch
     git -C "$KERN_SRC" am "$GAOKUN_DIR"/patches/others/*.patch
     git -C "$KERN_SRC" am "$GAOKUN_DIR"/patches/media/*.patch
-    git -C "$KERN_SRC" am "$GAOKUN_DIR"/patches/0099-arm64-gaokun3-import-local-dts-and-defconfig.patch
+    git -C "$KERN_SRC" am "$GAOKUN_DIR"/patches/gaokun3/*.patch
 }
 
 el2_state() {
