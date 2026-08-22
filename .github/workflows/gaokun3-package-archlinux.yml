@@ -6,7 +6,7 @@ on:
       kernel_tag:
         description: Linux kernel tag
         required: true
-        default: "v7.1"
+        default: "v7.1.8"
       build_el2:
         description: Build extra -el2 kernel packages
         required: true
@@ -56,7 +56,7 @@ jobs:
       - name: Checkout Linux source
         uses: actions/checkout@v6
         with:
-          repository: torvalds/linux
+          repository: gregkh/linux
           ref: ${{ env.KERNEL_TAG }}
           fetch-depth: 1
           path: build-packages/mainline-linux

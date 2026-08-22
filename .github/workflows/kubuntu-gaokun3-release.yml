@@ -10,7 +10,7 @@ on:
       kernel_tag:
         description: Linux kernel tag
         required: true
-        default: "v7.1"
+        default: "v7.1.8"
       desktop_environment:
         description: Kubuntu desktop metapackage
         required: true
