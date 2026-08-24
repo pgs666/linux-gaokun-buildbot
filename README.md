@@ -41,7 +41,7 @@ The package pipeline builds and installs dedicated package sets:
 - `upstream/*` and `others/0017`: adapted from [right-0903/linux-gaokun](https://github.com/right-0903/linux-gaokun) for the base SC8280XP / gaokun3 enablement, display bring-up, EC suspend/resume, ADSP FastRPC, and DSI stability work
 - `others/0001`: adapted from [whitelewi1-ctrl/matebook-e-go-linux](https://github.com/whitelewi1-ctrl/matebook-e-go-linux) to avoid setting `USE_BDADDR_PROPERTY` when the adapter address is invalid
 - `others/0002`: local change in this repository to enable DSC and allow 60 Hz / 120 Hz switching
-- `others/0003`: the release-ready Himax HX83121A SPI touchscreen driver, synchronized from [pgs666/EGoTouchRev-Linux revision `3828c10`](https://github.com/pgs666/EGoTouchRev-Linux/tree/3828c10)
+- `others/0003`: the refactored Himax HX83121A SPI touchscreen driver, synchronized from [pgs666/EGoTouchRev-Linux revision `dd96c8e`](https://github.com/pgs666/EGoTouchRev-Linux/tree/dd96c8e)
 - `others/0004`: adapted from [TheUnknownThing/linux-gaokun](https://github.com/TheUnknownThing/linux-gaokun) to improve UCSI handling and module wiring for the Type-C path
 - `media/*`: adapted from the [jhovold/linux](https://github.com/jhovold/linux/commits/wip/sc8280xp-6.16) to add SC8280XP Venus support
 - `gaokun3/*`: local Gaokun3 patch series, including DTS/defconfig import, EC temperature thermal-zone integration, CPU throttling at 75°C, and the touchscreen mode GPIO174 fix

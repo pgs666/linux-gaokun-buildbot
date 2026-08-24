@@ -13,7 +13,8 @@ typedef u8 hx_frame_u8;
 #endif
 
 /* The Linux event-stack format has a four-byte header.  This differs from
- * the seven-byte frame returned by the Windows THP interface. */
+ * the seven-byte frame returned by the Windows THP interface.
+ */
 #define HX_FRAME_HEADER_BYTES 4U
 #define HX_FRAME_MATRIX_BYTES (60U * 40U * 2U)
 #define HX_FRAME_SUFFIX_BYTES 256U
@@ -40,7 +41,8 @@ hx_parse_master_frame_status(const hx_frame_u8 *buf, size_t len,
 		return false;
 	/* Captured native event-stack master frames consistently use this sync
 	 * word.  Rejecting a shifted/non-master frame is safer than interpreting
-	 * its payload as a 40x60 capacitance matrix. */
+	 * its payload as a 40x60 capacitance matrix.
+	 */
 	if (buf[0] != 0x5a || buf[1] != 0xa5)
 		return false;
 	if (hx_frame_get_le16(buf + suffix + 6) != HX_FRAME_DIAG_VALID)
