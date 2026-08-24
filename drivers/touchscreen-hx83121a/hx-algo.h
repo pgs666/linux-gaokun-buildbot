@@ -47,7 +47,13 @@ struct input_mt_pos { int x; int y; };
  * @nbr_sum:    sum of all 8-neighbour signals (used for Z8 filter)
  * @zone_area:  area of the macro-zone this peak belongs to
  * @zone_index: index of the owning macro-zone
+ * @id:         persistent peak identity across adjacent frames
+ * @age:        consecutive matched-frame age (first frame is zero)
+ * @vr, @vc:    last matched grid velocity, used for peak-ID prediction
  * @on_edge:    true when the peak lies on the outermost grid row or column
+ * @fast_start_candidate: firmware-confirmed strong, compact edge onset
+ * @continuation_only: candidate may only update its bound existing slot
+ * @continuation_track_slot: sole existing slot eligible for this candidate
  */
 struct hx_peak {
 	u8  r;
@@ -56,7 +62,14 @@ struct hx_peak {
 	s32 nbr_sum;
 	u16 zone_area;
 	u8  zone_index;
+	u8  id;
+	u8  age;
+	s8  vr;
+	s8  vc;
 	bool on_edge;
+	bool fast_start_candidate;
+	bool continuation_only;
+	s8   continuation_track_slot;
 };
 
 /**
@@ -65,7 +78,12 @@ struct hx_peak {
  * @area:       number of pixels contributing to this contact
  * @signal_sum: integrated signal over the contact area
  * @is_edge:    true when the originating peak lies on the grid boundary
+ * @fast_start_candidate: contact may bypass new-touch debounce on FW rising
  * @peak_index: index of the peak that produced this contact
+ * @source_peak_id/source_peak_age: persistent source-peak identity
+ * @source_zone_index: owning macro-zone in the current frame
+ * @continuation_only: contact may not bootstrap a new tracking slot
+ * @continuation_track_slot: sole existing slot eligible for this contact
  */
 struct hx_contact {
 	s32  x;
@@ -73,7 +91,13 @@ struct hx_contact {
 	u16  area;
 	s32  signal_sum;
 	bool is_edge;
+	bool fast_start_candidate;
 	u8   peak_index;
+	u8   source_peak_id;
+	u8   source_peak_age;
+	u8   source_zone_index;
+	bool continuation_only;
+	s8   continuation_track_slot;
 };
 
 /**
@@ -85,6 +109,7 @@ struct hx_contact {
  * @age:        frames the slot has been active
  * @missed:     consecutive frames the slot had no matching detection
  * @debounce:   remaining debounce frames before the slot is reported
+ * @source_peak_id/source_peak_age: most recently matched source peak
  */
 struct hx_track {
 	bool active;
@@ -97,10 +122,22 @@ struct hx_track {
 	u8   age;
 	u8   missed;
 	u8   debounce;
+	u8   source_peak_id;
+	u8   source_peak_age;
 	s32  filtered_x_q8;
 	s32  filtered_y_q8;
 	s32  deriv_x_q8;
 	s32  deriv_y_q8;
+};
+
+/* Age a possible second touch from the moment it starts competing with an
+ * existing reported track.  Peak lifetime is not suitable for this: a mature
+ * residual lobe can become unmatched for the first time after a split. */
+struct hx_peak_competition {
+	u8 peak_id;
+	u8 age;
+	bool seen;
+	bool handoff_residual;
 };
 
 /**
@@ -158,6 +195,10 @@ struct hx_algo {
 
 	struct hx_peak peaks[HX_MAX_PEAKS];
 	u8   peak_count;
+	struct hx_peak prev_peaks[HX_MAX_PEAKS];
+	u8   prev_peak_count;
+	u8   next_peak_id;
+	struct hx_peak_competition peak_competition[HX_MAX_PEAKS];
 
 	/* Keep every peak candidate until the final strength-based capacity cut.
 	 * The old implementation truncated the ascending peak list to ten first,
@@ -174,6 +215,7 @@ struct hx_algo {
 	bool baseline_had_freeze;
 	u8 baseline_recovery_frames;
 
+#ifdef CONFIG_TOUCHSCREEN_HIMAX_HX83121A_DIAGNOSTICS
 	/* Read-only pipeline snapshot for diagnosing hardware-only dropouts. */
 	u32 diag_frame_seq;
 	s32 diag_common_diff;
@@ -185,6 +227,18 @@ struct hx_algo {
 	u8 diag_contacts_post_filter;
 	u8 diag_active_tracks;
 	u8 diag_reported_tracks;
+	u32 diag_small_peak_continued;
+	u32 diag_weak_peak_continued;
+	u32 diag_small_peak_rejected;
+	u32 diag_split_peak_deferred;
+	u32 diag_cross_zone_split_deferred;
+	u32 diag_peak_id_handoffs;
+	u32 diag_handoff_residual_deferred;
+	u32 diag_fast_edge_starts;
+	u32 baseline_generation;
+	u32 full_reset_count;
+	u32 live_clear_count;
+#endif
 
 	struct hx_palm_box palm_boxes[HX_MAX_PALM_BOXES];
 	u8 palm_box_count;
@@ -193,6 +247,8 @@ struct hx_algo {
 	struct hx_track tracks[HIMAX_MAX_TOUCH];
 	bool touch_active;
 	u8   touch_start_frames;
+	bool firmware_finger_present;
+	bool fast_edge_start_pending;
 	enum hx_gesture_state gesture_state;
 	u16 gesture_frames;
 	s32 gesture_start_x;
@@ -247,6 +303,12 @@ struct hx_algo {
 	s16  peak_signal_threshold_limit;
 	s16  peak_edge_threshold;
 	u8   peak_macro_min_area;
+	u8   peak_continue_min_area;
+	s16  peak_continue_min_signal;
+	s16  peak_single_track_continue_min_signal;
+	s32  peak_continue_dist2;
+	s16  peak_fast_start_min_signal;
+	u8   peak_fast_start_edge_cells;
 	bool palm_enabled;         /* palm-rejection on/off                */
 	u8   palm_area_threshold;  /* area >= this → palm                  */
 	s32  palm_signal_threshold;/* signal_sum >= this → palm            */
@@ -282,6 +344,12 @@ struct hx_algo {
 	u8 debounce_weak_extra;
 	u8 debounce_edge_extra;
 	s32 debounce_strong_signal;
+	bool firmware_edge_fast_start;
+	u8 split_peak_confirm_frames;
+	s32 split_peak_dist2;
+	u8 split_cross_zone_confirm_frames;
+	s32 split_cross_zone_dist2;
+	s32 track_peak_id_penalty;
 	bool ghost_enabled;
 	u16 ghost_row_distance;
 	u8 ghost_weak_ratio_q8;
@@ -303,6 +371,9 @@ enum hx_finger_state {
 /* ---- Public API ---- */
 
 void hx_algo_init_defaults(struct hx_algo *algo);
+void hx_algo_clear_live_state(struct hx_algo *algo);
+void hx_algo_full_reset(struct hx_algo *algo);
+/* Compatibility alias: runtime reset means preserving the learned baseline. */
 void hx_algo_reset_runtime(struct hx_algo *algo);
 int hx_algo_process_frame(struct hx_algo *algo, const u16 *raw);
 int hx_algo_process_frame_state(struct hx_algo *algo, const u16 *raw,

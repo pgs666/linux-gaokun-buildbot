@@ -31,6 +31,9 @@
 #define HIMAX_TRACK_LOST_FRAMES   4
 #define HIMAX_NEW_TOUCH_DEBOUNCE  1
 
+static s64 hx_dist2_predicted(const struct input_mt_pos *a,
+			      const struct hx_track *b);
+
 /* ======================================================================== */
 /* Initialisation                                                            */
 /* ======================================================================== */
@@ -82,6 +85,12 @@ void hx_algo_init_defaults(struct hx_algo *algo)
 	algo->peak_signal_threshold_limit = 1000;
 	algo->peak_edge_threshold = 300;
 	algo->peak_macro_min_area = 3;
+	algo->peak_continue_min_area = 1;
+	algo->peak_continue_min_signal = 900;
+	algo->peak_single_track_continue_min_signal = 650;
+	algo->peak_continue_dist2 = 220 * 220;
+	algo->peak_fast_start_min_signal = 1500;
+	algo->peak_fast_start_edge_cells = 4;
 	algo->palm_enabled       = true;
 	algo->palm_area_threshold    = 50;
 	algo->palm_signal_threshold  = 80000;
@@ -114,6 +123,12 @@ void hx_algo_init_defaults(struct hx_algo *algo)
 	algo->debounce_weak_extra = 1;
 	algo->debounce_edge_extra = 1;
 	algo->debounce_strong_signal = 3000;
+	algo->firmware_edge_fast_start = true;
+	algo->split_peak_confirm_frames = 8;
+	algo->split_peak_dist2 = 300 * 300;
+	algo->split_cross_zone_confirm_frames = 4;
+	algo->split_cross_zone_dist2 = 180 * 180;
+	algo->track_peak_id_penalty = 40 * 40;
 	algo->ghost_enabled = true;
 	algo->ghost_row_distance = 32;
 	algo->ghost_weak_ratio_q8 = 96;
@@ -126,9 +141,11 @@ void hx_algo_init_defaults(struct hx_algo *algo)
 	algo->gesture_long_press_frames = 45;
 }
 
-void hx_algo_reset_runtime(struct hx_algo *algo)
+static void hx_algo_clear_transient_state(struct hx_algo *algo)
 {
 	memset(algo->frame, 0, sizeof(algo->frame));
+	/* GridIIR is not in the v1.1.2 default pipeline.  If enabled locally,
+	 * discard its pre-suspend history so it cannot manufacture a wake peak. */
 	memset(algo->iir_history, 0, sizeof(algo->iir_history));
 	memset(algo->visited, 0, sizeof(algo->visited));
 	memset(algo->zone_map, 0, sizeof(algo->zone_map));
@@ -136,8 +153,9 @@ void hx_algo_reset_runtime(struct hx_algo *algo)
 	memset(algo->zone_arena, 0, sizeof(algo->zone_arena));
 	memset(algo->zones, 0, sizeof(algo->zones));
 	memset(algo->peaks, 0, sizeof(algo->peaks));
+	memset(algo->prev_peaks, 0, sizeof(algo->prev_peaks));
+	memset(algo->peak_competition, 0, sizeof(algo->peak_competition));
 	memset(algo->contacts, 0, sizeof(algo->contacts));
-	memset(algo->baseline_q8, 0, sizeof(algo->baseline_q8));
 	memset(algo->baseline_release_hold, 0,
 	       sizeof(algo->baseline_release_hold));
 	memset(algo->baseline_hist, 0, sizeof(algo->baseline_hist));
@@ -149,10 +167,13 @@ void hx_algo_reset_runtime(struct hx_algo *algo)
 	memset(algo->assign_p, 0, sizeof(algo->assign_p));
 	memset(algo->assign_way, 0, sizeof(algo->assign_way));
 	algo->iir_initialized = false;
-	algo->baseline_initialized = false;
+	/* Preserve the converged per-cell baseline across display/lid/idle and
+	 * hardware reinitialisation.  Force the next valid frame to re-evaluate
+	 * recovery instead of inheriting a stale touch/freeze transition. */
 	algo->baseline_prev_had_signal = false;
-	algo->baseline_had_freeze = false;
+	algo->baseline_had_freeze = algo->baseline_initialized;
 	algo->baseline_recovery_frames = 0;
+#ifdef CONFIG_TOUCHSCREEN_HIMAX_HX83121A_DIAGNOSTICS
 	algo->diag_frame_seq = 0;
 	algo->diag_common_diff = 0;
 	algo->diag_frame_max = 0;
@@ -163,17 +184,49 @@ void hx_algo_reset_runtime(struct hx_algo *algo)
 	algo->diag_contacts_post_filter = 0;
 	algo->diag_active_tracks = 0;
 	algo->diag_reported_tracks = 0;
+#endif
 	algo->zone_arena_used = 0;
 	algo->zone_count = 0;
 	algo->peak_count = 0;
+	algo->prev_peak_count = 0;
+	algo->next_peak_id = 1;
 	algo->contact_count = 0;
 	algo->palm_box_count = 0;
 	algo->touch_active = false;
 	algo->touch_start_frames = 0;
+	algo->firmware_finger_present = false;
+	algo->fast_edge_start_pending = false;
 	algo->gesture_state = HX_GESTURE_IDLE;
 	algo->gesture_frames = 0;
 	algo->gesture_start_x = 0;
 	algo->gesture_start_y = 0;
+}
+
+void hx_algo_clear_live_state(struct hx_algo *algo)
+{
+	hx_algo_clear_transient_state(algo);
+#ifdef CONFIG_TOUCHSCREEN_HIMAX_HX83121A_DIAGNOSTICS
+	algo->live_clear_count++;
+#endif
+}
+
+void hx_algo_full_reset(struct hx_algo *algo)
+{
+	hx_algo_clear_transient_state(algo);
+	memset(algo->baseline_q8, 0, sizeof(algo->baseline_q8));
+	algo->baseline_initialized = false;
+	algo->baseline_prev_had_signal = false;
+	algo->baseline_had_freeze = false;
+	algo->baseline_recovery_frames = 0;
+#ifdef CONFIG_TOUCHSCREEN_HIMAX_HX83121A_DIAGNOSTICS
+	algo->baseline_generation++;
+	algo->full_reset_count++;
+#endif
+}
+
+void hx_algo_reset_runtime(struct hx_algo *algo)
+{
+	hx_algo_clear_live_state(algo);
 }
 
 /* ======================================================================== */
@@ -261,7 +314,9 @@ static void hx_prepare_frame_baseline(struct hx_algo *algo, const u16 *raw,
 		}
 	}
 	common_diff = common_count ? (s32)(common_sum / common_count) : 0;
+#ifdef CONFIG_TOUCHSCREEN_HIMAX_HX83121A_DIAGNOSTICS
 	algo->diag_common_diff = common_diff;
+#endif
 	if (finger_state == HX_FINGER_PRESENT) {
 		has_signal = true;
 	} else if (finger_state == HX_FINGER_UNKNOWN) {
@@ -380,7 +435,9 @@ static void hx_prepare_frame_baseline(struct hx_algo *algo, const u16 *raw,
 		}
 	}
 	algo->baseline_prev_had_signal = has_signal;
+#ifdef CONFIG_TOUCHSCREEN_HIMAX_HX83121A_DIAGNOSTICS
 	algo->diag_has_signal = has_signal;
+#endif
 	algo->baseline_had_freeze = found_freeze;
 
 	/* pixel [0][0] is always invalid on this panel layout */
@@ -953,6 +1010,111 @@ static void hx_insert_peak(struct hx_algo *algo, const struct hx_peak *p)
 		algo->peaks[weakest] = *p;
 }
 
+static u8 hx_allocate_peak_id(struct hx_algo *algo)
+{
+	int attempt;
+
+	for (attempt = 0; attempt < U8_MAX; attempt++) {
+		u8 id = algo->next_peak_id++;
+		bool used = false;
+		int i;
+
+		if (!algo->next_peak_id)
+			algo->next_peak_id = 1;
+		if (!id)
+			continue;
+		for (i = 0; i < algo->peak_count; i++)
+			if (algo->peaks[i].id == id) {
+				used = true;
+				break;
+			}
+		if (!used)
+			return id;
+	}
+	return 1;
+}
+
+/* Preserve peak identity before contacts are expanded.  A pure adjacent-cell
+ * match loses identity during a fast swipe (the captured failure moved more
+ * than three cells per frame).  Predict from the last grid velocity, while
+ * retaining a wider raw-distance fallback for acceleration and first motion.
+ * This is deliberately separate from the output-slot tracker: peak identity
+ * is supporting evidence, never an exclusive ownership lock. */
+static void hx_track_peak_ids(struct hx_algo *algo)
+{
+	bool current_used[HX_MAX_PEAKS] = { false };
+	bool previous_used[HX_MAX_PEAKS] = { false };
+	int i;
+
+	for (i = 0; i < algo->peak_count; i++) {
+		algo->peaks[i].id = 0;
+		algo->peaks[i].age = 0;
+	}
+	for (;;) {
+		int best_score = INT_MAX;
+		int best_current = -1;
+		int best_previous = -1;
+		int j;
+
+		for (i = 0; i < algo->peak_count; i++) {
+			if (current_used[i])
+				continue;
+			for (j = 0; j < algo->prev_peak_count; j++) {
+				const struct hx_peak *cur = &algo->peaks[i];
+				const struct hx_peak *prev = &algo->prev_peaks[j];
+				int dr, dc, raw_distance, predicted_distance;
+				int score;
+
+				if (previous_used[j])
+					continue;
+				dr = (int)cur->r - (int)prev->r;
+				dc = (int)cur->c - (int)prev->c;
+				raw_distance = abs(dr) + abs(dc);
+				predicted_distance =
+					abs((int)cur->r - ((int)prev->r + prev->vr)) +
+					abs((int)cur->c - ((int)prev->c + prev->vc));
+				if (raw_distance > 10 && predicted_distance > 6)
+					continue;
+				/* Prediction dominates.  Raw displacement and signal
+				 * continuity only break ambiguous split-lobe matches. */
+				score = predicted_distance * 16 + raw_distance * 2;
+				score += min(abs((int)cur->z - (int)prev->z) / 64, 32);
+				if ((prev->vr || prev->vc) &&
+				    dr * prev->vr + dc * prev->vc <= 0 &&
+				    raw_distance > 1)
+					score += 48;
+				if (score < best_score) {
+					best_score = score;
+					best_current = i;
+					best_previous = j;
+				}
+			}
+		}
+		if (best_current < 0)
+			break;
+		algo->peaks[best_current].id =
+			algo->prev_peaks[best_previous].id;
+		algo->peaks[best_current].age =
+			algo->prev_peaks[best_previous].age < U8_MAX ?
+			algo->prev_peaks[best_previous].age + 1 : U8_MAX;
+		algo->peaks[best_current].vr = clamp_t(int,
+			(int)algo->peaks[best_current].r -
+			(int)algo->prev_peaks[best_previous].r, -128, 127);
+		algo->peaks[best_current].vc = clamp_t(int,
+			(int)algo->peaks[best_current].c -
+			(int)algo->prev_peaks[best_previous].c, -128, 127);
+		current_used[best_current] = true;
+		previous_used[best_previous] = true;
+	}
+	for (i = 0; i < algo->peak_count; i++)
+		if (!algo->peaks[i].id)
+			algo->peaks[i].id = hx_allocate_peak_id(algo);
+
+	memcpy(algo->prev_peaks, algo->peaks,
+	       algo->peak_count * sizeof(algo->peaks[0]));
+	algo->prev_peak_count = algo->peak_count;
+}
+
 void hx_detect_peaks(struct hx_algo *algo)
 {
 	u8 zi;
@@ -1000,6 +1162,7 @@ void hx_detect_peaks(struct hx_algo *algo)
 				.zone_area = zone->area,
 				.zone_index = zi,
 				.on_edge = on_edge,
+				.continuation_track_slot = -1,
 			};
 			hx_insert_peak(algo, &peak);
 		}
@@ -1072,19 +1235,87 @@ void hx_detect_peaks(struct hx_algo *algo)
 		algo->peak_count = dst;
 	}
 
-	/* --- Zone minimum-area filter: area < 2 → reject (except edge peaks) --- */
+	/* Small peaks normally may only continue an existing reported track.  A
+	 * single strong compact peak close to a physical edge is the one exception:
+	 * on a trustworthy firmware finger-on transition it may bootstrap the first
+	 * slot.  This covers fast edge entries whose footprint has not grown to the
+	 * normal macro-area threshold yet. */
 	{
 		u8 dst = 0, i;
+		int reported_tracks = 0;
+		int ti;
+
+		for (ti = 0; ti < HIMAX_MAX_TOUCH; ti++)
+			if (algo->tracks[ti].active && algo->tracks[ti].reported)
+				reported_tracks++;
 
 		for (i = 0; i < algo->peak_count; i++) {
+			struct hx_peak *pk = &algo->peaks[i];
 			bool on_edge = (algo->peaks[i].r == 0 ||
 					algo->peaks[i].r == HX_ROWS - 1 ||
 					algo->peaks[i].c == 0 ||
 					algo->peaks[i].c == HX_COLS - 1);
 
-			if (algo->peaks[i].zone_area >= algo->peak_macro_min_area ||
-			    on_edge)
-				algo->peaks[dst++] = algo->peaks[i];
+			bool near_edge =
+				pk->r < algo->peak_fast_start_edge_cells ||
+				pk->r >= HX_ROWS - algo->peak_fast_start_edge_cells ||
+				pk->c < algo->peak_fast_start_edge_cells ||
+				pk->c >= HX_COLS - algo->peak_fast_start_edge_cells;
+			bool fast_start = algo->fast_edge_start_pending &&
+				algo->zone_count == 1 && algo->peak_count == 1 &&
+				pk->zone_area >= algo->peak_continue_min_area &&
+				pk->zone_area < algo->peak_macro_min_area && near_edge &&
+				pk->z >= algo->peak_fast_start_min_signal;
+			bool weak_single_track = reported_tracks == 1 &&
+				algo->zone_count == 1 && algo->firmware_finger_present &&
+				pk->z >= algo->peak_single_track_continue_min_signal;
+			bool continuation = false;
+			int matches = 0;
+			s8 continuation_slot = -1;
+
+			pk->fast_start_candidate = fast_start;
+			pk->continuation_only = false;
+			pk->continuation_track_slot = -1;
+			if (pk->zone_area < algo->peak_macro_min_area && !on_edge &&
+			    pk->zone_area >= algo->peak_continue_min_area &&
+			    (pk->z >= algo->peak_continue_min_signal ||
+			     weak_single_track)) {
+				struct input_mt_pos approx = {
+					.x = (pk->c * 256 + 128) / 6,
+					.y = 5 * (pk->r * 256 + 128) / 32,
+				};
+
+				for (ti = 0; ti < HIMAX_MAX_TOUCH; ti++) {
+					struct hx_track *trk = &algo->tracks[ti];
+
+					if (!trk->active || !trk->reported)
+						continue;
+					if (hx_dist2_predicted(&approx, trk) <=
+					    max_t(s32, algo->peak_continue_dist2, 1)) {
+						matches++;
+						continuation_slot = ti;
+					}
+				}
+				continuation = matches == 1;
+			}
+			if (pk->zone_area >= algo->peak_macro_min_area || on_edge ||
+			    fast_start || continuation) {
+				pk->continuation_only = continuation;
+				pk->continuation_track_slot = continuation ?
+					continuation_slot : -1;
+				algo->peaks[dst++] = *pk;
+#ifdef CONFIG_TOUCHSCREEN_HIMAX_HX83121A_DIAGNOSTICS
+				if (continuation)
+					algo->diag_small_peak_continued++;
+				if (continuation &&
+				    pk->z < algo->peak_continue_min_signal)
+					algo->diag_weak_peak_continued++;
+#endif
+			} else {
+#ifdef CONFIG_TOUCHSCREEN_HIMAX_HX83121A_DIAGNOSTICS
+				algo->diag_small_peak_rejected++;
+#endif
+			}
 		}
 		algo->peak_count = dst;
 	}
@@ -1162,6 +1393,8 @@ void hx_detect_peaks(struct hx_algo *algo)
 				swap(algo->peaks[i], algo->peaks[min_idx]);
 		}
 	}
+
+	hx_track_peak_ids(algo);
 }
 
 /* ======================================================================== */
@@ -1277,7 +1510,13 @@ static bool hx_expand_single_peak(struct hx_algo *algo, int pi,
 	ct->signal_sum = sig_sum;
 	ct->is_edge = (pk->r == 0 || pk->r == HX_ROWS - 1 ||
 		       pk->c == 0 || pk->c == HX_COLS - 1);
+	ct->fast_start_candidate = pk->fast_start_candidate;
 	ct->peak_index = pi;
+	ct->source_peak_id = pk->id;
+	ct->source_peak_age = pk->age;
+	ct->source_zone_index = pk->zone_index;
+	ct->continuation_only = pk->continuation_only;
+	ct->continuation_track_slot = pk->continuation_track_slot;
 
 	return clean;
 }
@@ -1325,7 +1564,13 @@ static void hx_local_centroid(struct hx_algo *algo, int pi,
 	ct->signal_sum = sig_sum;
 	ct->is_edge = (pk->r == 0 || pk->r == HX_ROWS - 1 ||
 		       pk->c == 0 || pk->c == HX_COLS - 1);
+	ct->fast_start_candidate = pk->fast_start_candidate;
 	ct->peak_index = pi;
+	ct->source_peak_id = pk->id;
+	ct->source_peak_age = pk->age;
+	ct->source_zone_index = pk->zone_index;
+	ct->continuation_only = pk->continuation_only;
+	ct->continuation_track_slot = pk->continuation_track_slot;
 }
 
 /*
@@ -1468,6 +1713,29 @@ static inline s64 hx_dist2_predicted(const struct input_mt_pos *a,
 	return (s64)dx * dx + (s64)dy * dy;
 }
 
+/* A fast swipe can cover several times the immediately preceding step when a
+ * weak corner frame briefly pins the centroid.  For a competing peak-ID
+ * handoff, measure distance to a short forward motion ray rather than only to
+ * the one-step prediction.  This is never used to enlarge the match gate. */
+static s64 hx_dist2_motion_ray(const struct input_mt_pos *a,
+				const struct hx_track *b)
+{
+	s64 best = hx_dist2_predicted(a, b);
+	int step;
+
+	if (!b->vx && !b->vy)
+		return best;
+	for (step = 2; step <= 4; step++) {
+		s32 dx = a->x - (b->x + b->vx * step);
+		s32 dy = a->y - (b->y + b->vy * step);
+		s64 d2 = (s64)dx * dx + (s64)dy * dy;
+
+		if (d2 < best)
+			best = d2;
+	}
+	return best;
+}
+
 static void hx_reset_track(struct hx_track *trk)
 {
 	memset(trk, 0, sizeof(*trk));
@@ -1577,10 +1845,121 @@ static void hx_hungarian_assign(struct hx_algo *algo, const u8 *active,
 	}
 }
 
+static bool hx_is_unconfirmed_split(struct hx_algo *algo,
+				    const struct input_mt_pos *det, int candidate,
+				    const u8 *active, int active_cnt,
+				    const s8 *match, const u8 *prior_peak_id)
+{
+	const struct hx_contact *contact;
+	int reported_tracks = 0;
+	int i;
+
+	if (candidate >= algo->contact_count)
+		return false;
+	contact = &algo->contacts[candidate];
+	for (i = 0; i < active_cnt; i++)
+		if (algo->tracks[active[i]].reported)
+			reported_tracks++;
+
+	for (i = 0; i < active_cnt; i++) {
+		int ti = active[i];
+		int di = match[ti];
+		bool same_zone;
+		bool handoff_residual;
+		bool continuing_residual = false;
+		u8 confirm_frames;
+		s32 confirm_dist2;
+		s32 dx, dy;
+
+		if (di < 0 || di >= algo->contact_count ||
+		    !algo->tracks[ti].reported || di == candidate)
+			continue;
+		same_zone = contact->source_zone_index ==
+			algo->contacts[di].source_zone_index;
+		handoff_residual = prior_peak_id[ti] &&
+			contact->source_peak_id == prior_peak_id[ti] &&
+			algo->contacts[di].source_peak_id &&
+			algo->contacts[di].source_peak_id != prior_peak_id[ti];
+		for (int k = 0; k < HX_MAX_PEAKS; k++)
+			if (contact->source_peak_id &&
+			    algo->peak_competition[k].peak_id ==
+				contact->source_peak_id) {
+				continuing_residual =
+					algo->peak_competition[k].handoff_residual;
+				break;
+			}
+		/* Separate macro zones can still be two lobes of one moving finger.
+		 * Apply the shorter cross-zone guard only to a single reported touch;
+		 * established multi-touch must not acquire extra latency. */
+		if (!handoff_residual && !continuing_residual && !same_zone &&
+		    reported_tracks != 1)
+			continue;
+		confirm_frames = (same_zone || handoff_residual ||
+			continuing_residual) ?
+			algo->split_peak_confirm_frames :
+			algo->split_cross_zone_confirm_frames;
+		confirm_dist2 = same_zone ? algo->split_peak_dist2 :
+			algo->split_cross_zone_dist2;
+		if (confirm_frames <= 1)
+			continue;
+		dx = det[candidate].x - det[di].x;
+		dy = det[candidate].y - det[di].y;
+		if (handoff_residual || continuing_residual ||
+		    (s64)dx * dx + (s64)dy * dy <=
+		    max_t(s32, confirm_dist2, 1)) {
+			u8 competition_age = 1;
+			int k, free_slot = -1;
+
+			/* Count from the first frame this peak is an unmatched
+			 * competitor, not from its absolute peak lifetime. */
+			for (k = 0; k < HX_MAX_PEAKS; k++) {
+				struct hx_peak_competition *pc =
+					&algo->peak_competition[k];
+
+				if (pc->peak_id == contact->source_peak_id &&
+				    contact->source_peak_id) {
+					if (!pc->seen && pc->age < U8_MAX)
+						pc->age++;
+					pc->seen = true;
+					pc->handoff_residual |= handoff_residual;
+					competition_age = pc->age;
+					break;
+				}
+				if (free_slot < 0 && (!pc->peak_id || !pc->seen))
+					free_slot = k;
+			}
+			if (k == HX_MAX_PEAKS && contact->source_peak_id &&
+			    free_slot >= 0) {
+				struct hx_peak_competition *pc =
+					&algo->peak_competition[free_slot];
+
+				pc->peak_id = contact->source_peak_id;
+				pc->age = 1;
+				pc->seen = true;
+				pc->handoff_residual = handoff_residual;
+			}
+			if (competition_age >= confirm_frames)
+				continue;
+#ifdef CONFIG_TOUCHSCREEN_HIMAX_HX83121A_DIAGNOSTICS
+			algo->diag_split_peak_deferred++;
+			if (!same_zone)
+				algo->diag_cross_zone_split_deferred++;
+			if (handoff_residual || continuing_residual)
+				algo->diag_handoff_residual_deferred++;
+#endif
+			return true;
+		}
+	}
+	return false;
+}
+
 void hx_track_contacts(struct hx_algo *algo,
 		       struct input_mt_pos *det, int det_cnt)
 {
 	bool det_used[HIMAX_MAX_TOUCH] = { false };
+	bool target_has_regular[HIMAX_MAX_TOUCH] = { false };
+	bool target_has_same_peak[HIMAX_MAX_TOUCH] = { false };
+	u8 prior_peak_id[HIMAX_MAX_TOUCH] = { 0 };
 	u8 active[HIMAX_MAX_TOUCH];
 	s8 match[HIMAX_MAX_TOUCH];
 	u16  jump_released = 0;  /* bitmask: slots freed by jump detection */
@@ -1588,19 +1967,76 @@ void hx_track_contacts(struct hx_algo *algo,
 	int i, j;
 	const s64 inf = (s64)1 << 55;
 
+	for (i = 0; i < HX_MAX_PEAKS; i++)
+		algo->peak_competition[i].seen = false;
+
 	for (i = 0; i < HIMAX_MAX_TOUCH; i++) {
-		if (algo->tracks[i].active)
+		if (algo->tracks[i].active) {
+			prior_peak_id[i] = algo->tracks[i].source_peak_id;
 			active[active_cnt++] = i;
+		}
+	}
+	/* A regular detection always wins over a continuation-only fallback for
+	 * the same slot.  Otherwise Hungarian could consume the tiny split peak
+	 * for the old slot and let the regular peak bootstrap a duplicate slot. */
+	for (i = 0; i < active_cnt; i++) {
+		int ti = active[i];
+		struct hx_track *trk = &algo->tracks[ti];
+		s64 gate2 = max_t(s64, algo->track_dist2_max, 1);
+
+		if (trk->missed)
+			gate2 *= min_t(s32, (s32)trk->missed + 1, 4);
+		for (j = 0; j < det_cnt; j++) {
+			struct hx_contact *ct = j < algo->contact_count ?
+				&algo->contacts[j] : NULL;
+
+			if (j < algo->contact_count &&
+			    algo->contacts[j].continuation_only)
+				continue;
+			if (hx_dist2_predicted(&det[j], trk) <= gate2) {
+				target_has_regular[ti] = true;
+				if (ct && trk->source_peak_id &&
+				    ct->source_peak_id == trk->source_peak_id)
+					target_has_same_peak[ti] = true;
+			}
+		}
 	}
 	for (i = 0; i < active_cnt; i++) {
-		struct hx_track *trk = &algo->tracks[active[i]];
+		int ti = active[i];
+		struct hx_track *trk = &algo->tracks[ti];
 		s64 unmatched = max_t(s64, algo->track_dist2_max, 1) * 16;
 		for (j = 0; j < det_cnt; j++) {
 			s64 d2 = hx_dist2_predicted(&det[j], trk);
 			s64 gate2 = max_t(s64, algo->track_dist2_max, 1);
+			s64 cost = d2;
+			struct hx_contact *ct = j < algo->contact_count ?
+				&algo->contacts[j] : NULL;
+
 			if (trk->missed)
 				gate2 *= min_t(s32, (s32)trk->missed + 1, 4);
-			algo->assign_cost[i][j] = d2 <= gate2 ? d2 : inf;
+			if (ct && ct->continuation_only &&
+			    (ct->continuation_track_slot != ti ||
+			     target_has_regular[ti]))
+				algo->assign_cost[i][j] = inf;
+			else if (d2 <= gate2) {
+				/* Peak IDs are continuity hints, not hard ownership.  A
+				 * hard lock strands a fast-moving finger on its old residual
+				 * lobe and turns the real moving lobe into a second slot. */
+				if (ct && trk->source_peak_id && ct->source_peak_id &&
+				    trk->source_peak_id != ct->source_peak_id) {
+					s64 age_weight = 1 +
+						min_t(u8, trk->source_peak_age, 20) / 10;
+
+					if (target_has_same_peak[ti])
+						cost = hx_dist2_motion_ray(&det[j], trk);
+
+					cost += (s64)algo->track_peak_id_penalty *
+						age_weight;
+				}
+				algo->assign_cost[i][j] = cost;
+			} else {
+				algo->assign_cost[i][j] = inf;
+			}
 		}
 		for (j = det_cnt; j < det_cnt + active_cnt; j++)
 			algo->assign_cost[i][j] = unmatched;
@@ -1654,6 +2090,17 @@ void hx_track_contacts(struct hx_algo *algo,
 		trk->missed = 0;
 		if (di < algo->contact_count)
 			trk->signal_sum = algo->contacts[di].signal_sum;
+		if (di < algo->contact_count &&
+		    algo->contacts[di].source_peak_id) {
+#ifdef CONFIG_TOUCHSCREEN_HIMAX_HX83121A_DIAGNOSTICS
+			if (target_has_same_peak[ti] && trk->source_peak_id &&
+			    trk->source_peak_id !=
+				algo->contacts[di].source_peak_id)
+				algo->diag_peak_id_handoffs++;
+#endif
+			trk->source_peak_id = algo->contacts[di].source_peak_id;
+			trk->source_peak_age = algo->contacts[di].source_peak_age;
+		}
 		if (trk->age < U8_MAX)
 			trk->age++;
 		if (trk->debounce > 0)
@@ -1672,7 +2119,8 @@ void hx_track_contacts(struct hx_algo *algo,
 		 * Before the first stable touch is established, drop stray
 		 * tracks immediately to prevent noise from being reported.
 		 */
-		if (algo->track_active_guard && !algo->touch_active) {
+		if (!trk->reported ||
+		    (algo->track_active_guard && !algo->touch_active)) {
 			hx_reset_track(trk);
 			continue;
 		}
@@ -1687,6 +2135,12 @@ void hx_track_contacts(struct hx_algo *algo,
 		struct hx_track *trk = NULL;
 
 		if (det_used[j])
+			continue;
+		if (j < algo->contact_count &&
+		    algo->contacts[j].continuation_only)
+			continue;
+		if (hx_is_unconfirmed_split(algo, det, j, active, active_cnt,
+					    match, prior_peak_id))
 			continue;
 
 		for (i = 0; i < HIMAX_MAX_TOUCH; i++) {
@@ -1708,6 +2162,17 @@ void hx_track_contacts(struct hx_algo *algo,
 				trk->debounce += algo->debounce_weak_extra;
 			if (algo->contacts[j].is_edge)
 				trk->debounce += algo->debounce_edge_extra;
+			trk->source_peak_id = algo->contacts[j].source_peak_id;
+			trk->source_peak_age = algo->contacts[j].source_peak_age;
+		}
+		if (algo->fast_edge_start_pending && active_cnt == 0 &&
+		    det_cnt == 1 && j == 0 && j < algo->contact_count &&
+		    (algo->contacts[j].is_edge ||
+		     algo->contacts[j].fast_start_candidate)) {
+			trk->debounce = 0;
+#ifdef CONFIG_TOUCHSCREEN_HIMAX_HX83121A_DIAGNOSTICS
+			algo->diag_fast_edge_starts++;
+#endif
 		}
 		trk->x        = det[j].x;
 		trk->y        = det[j].y;
@@ -1719,6 +2184,11 @@ void hx_track_contacts(struct hx_algo *algo,
 			trk->signal_sum = algo->contacts[j].signal_sum;
 		trk->reported = trk->debounce == 0 && algo->touch_active;
 	}
+
+	for (i = 0; i < HX_MAX_PEAKS; i++)
+		if (!algo->peak_competition[i].seen)
+			memset(&algo->peak_competition[i], 0,
+			       sizeof(algo->peak_competition[i]));
 }
 
 int hx_count_stable_tracks(struct hx_algo *algo)
@@ -1828,17 +2298,36 @@ int hx_algo_process_frame_state(struct hx_algo *algo, const u16 *raw,
 				enum hx_finger_state finger_state)
 {
 	struct input_mt_pos det[HIMAX_MAX_TOUCH];
+	bool firmware_finger_rising = false;
+	bool has_active_track = false;
 	int det_cnt = 0;
 	int stable = 0;
 	int i;
+#ifdef CONFIG_TOUCHSCREEN_HIMAX_HX83121A_DIAGNOSTICS
 	s16 frame_max = 0;
 
 	algo->diag_frame_seq++;
+#endif
 
+	if (finger_state == HX_FINGER_PRESENT) {
+		firmware_finger_rising = !algo->firmware_finger_present;
+		algo->firmware_finger_present = true;
+	} else if (finger_state == HX_FINGER_ABSENT) {
+		algo->firmware_finger_present = false;
+	}
+	for (i = 0; i < HIMAX_MAX_TOUCH; i++)
+		if (algo->tracks[i].active) {
+			has_active_track = true;
+			break;
+		}
+	algo->fast_edge_start_pending = algo->firmware_edge_fast_start &&
+		firmware_finger_rising && !has_active_track;
 	hx_preprocess_frame_state(algo, raw, finger_state);
+#ifdef CONFIG_TOUCHSCREEN_HIMAX_HX83121A_DIAGNOSTICS
 	for (i = 0; i < HX_PIXELS; i++)
 		frame_max = max(frame_max, ((s16 *)algo->frame)[i]);
 	algo->diag_frame_max = frame_max;
+#endif
 
 	/* The controller's master-frame status is authoritative for lift-off.
 	 * Do not let matrix rebound or the tracker's silent-gap window extend an
@@ -1848,26 +2337,49 @@ int hx_algo_process_frame_state(struct hx_algo *algo, const u16 *raw,
 	if (finger_state == HX_FINGER_ABSENT) {
 		algo->zone_count = 0;
 		algo->peak_count = 0;
+		algo->prev_peak_count = 0;
 		algo->contact_count = 0;
+#ifdef CONFIG_TOUCHSCREEN_HIMAX_HX83121A_DIAGNOSTICS
 		algo->diag_zones = 0;
 		algo->diag_peaks = 0;
 		algo->diag_contacts_pre_filter = 0;
 		algo->diag_contacts_post_filter = 0;
+#endif
 		for (i = 0; i < HIMAX_MAX_TOUCH; i++)
 			hx_reset_track(&algo->tracks[i]);
 		goto update_state;
 	}
 
 	hx_detect_macro_zones(algo);
+#ifdef CONFIG_TOUCHSCREEN_HIMAX_HX83121A_DIAGNOSTICS
 	algo->diag_zones = algo->zone_count;
+#endif
 	hx_reject_palms(algo);
 	hx_detect_peaks(algo);
+#ifdef CONFIG_TOUCHSCREEN_HIMAX_HX83121A_DIAGNOSTICS
 	algo->diag_peaks = algo->peak_count;
+#endif
 	hx_expand_and_resolve(algo, det, &det_cnt);
+#ifdef CONFIG_TOUCHSCREEN_HIMAX_HX83121A_DIAGNOSTICS
 	algo->diag_contacts_pre_filter = det_cnt;
+#endif
 	hx_suppress_rx_ghosts(algo, det, &det_cnt);
+#ifdef CONFIG_TOUCHSCREEN_HIMAX_HX83121A_DIAGNOSTICS
 	algo->diag_contacts_post_filter = det_cnt;
+#endif
+	/* Himax coordinate-reporting drivers trust a valid firmware finger-on
+	 * transition and report its first coordinate immediately.  Our raw-matrix
+	 * path still requires the candidate to survive palm, edge and ghost
+	 * filtering, and only grants that confidence to one initial edge contact.
+	 * A sustained firmware-present state cannot validate later edge noise. */
+	algo->fast_edge_start_pending = algo->firmware_edge_fast_start &&
+		firmware_finger_rising && !has_active_track && det_cnt == 1 &&
+		algo->contact_count == 1 &&
+		(algo->contacts[0].is_edge ||
+		 algo->contacts[0].fast_start_candidate) &&
+		!algo->contacts[0].continuation_only;
 	hx_track_contacts(algo, det, det_cnt);
+	algo->fast_edge_start_pending = false;
 
 update_state:
 	for (i = 0; i < HIMAX_MAX_TOUCH; i++)
@@ -1881,16 +2393,22 @@ update_state:
 		algo->touch_start_frames = 0;
 		algo->touch_active = false;
 	}
+#ifdef CONFIG_TOUCHSCREEN_HIMAX_HX83121A_DIAGNOSTICS
 	algo->diag_active_tracks = 0;
 	algo->diag_reported_tracks = 0;
+#endif
 	for (i = 0; i < HIMAX_MAX_TOUCH; i++) {
+#ifdef CONFIG_TOUCHSCREEN_HIMAX_HX83121A_DIAGNOSTICS
 		if (algo->tracks[i].active)
 			algo->diag_active_tracks++;
+#endif
 		if (algo->tracks[i].active && algo->tracks[i].debounce == 0 &&
 		    algo->touch_active)
 			algo->tracks[i].reported = true;
+#ifdef CONFIG_TOUCHSCREEN_HIMAX_HX83121A_DIAGNOSTICS
 		if (algo->tracks[i].reported)
 			algo->diag_reported_tracks++;
+#endif
 	}
 
 	hx_update_gesture(algo);
